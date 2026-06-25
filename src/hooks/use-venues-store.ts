@@ -1,5 +1,3 @@
-'use client';
-
 import { useState, useEffect, useCallback } from 'react';
 import type { Venue } from '@/types';
 
@@ -32,7 +30,6 @@ export function useVenues() {
   }, []);
 
   const updateVenue = useCallback(async (updatedVenue: Venue) => {
-    if (!updatedVenue.id) return;
     setVenues(prev => {
       const updated = prev.map(v => v.id === updatedVenue.id ? updatedVenue : v).sort((a, b) => a.name.localeCompare(b.name));
       localStorage.setItem('dj_venues', JSON.stringify(updated));
