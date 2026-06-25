@@ -8,7 +8,7 @@ const defaultSettings: Settings = {
   dateFormat: 'MM/DD/YYYY'
 };
 
-export function useSettings() {
+export function useSettingsStore() {
   const [settings, setSettingsState] = useState<Settings>(defaultSettings);
   const [isInitialized, setIsInitialized] = useState(false);
 

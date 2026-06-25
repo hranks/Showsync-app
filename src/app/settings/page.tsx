@@ -1,7 +1,7 @@
 
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -11,24 +11,98 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { VenueList } from '@/components/settings/venue-list';
-import { LogOut, Trash2, Download, Mail, Save, Loader2, Database } from 'lucide-react';
+import { LogOut, Trash2, Download, Mail, Save, Loader2, Database, Cloud } from 'lucide-react';
 import { useSettingsStore } from '@/hooks/use-settings-store';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/types';
 import { useTranslation } from '@/hooks/use-translation';
 import { sendReport } from '@/ai/flows/send-report-flow';
+import { initAuth, googleSignIn, getAccessToken, logout } from '@/lib/auth';
+import type { User } from 'firebase/auth';
 
 export default function SettingsPage() {
   const { settings, setSettings } = useSettingsStore();
-  const [localSettings, setLocalSettings] = React.useState<Settings>(settings);
-  const [isSendingTest, setIsSendingTest] = React.useState(false);
+  const [localSettings, setLocalSettings] = useState<Settings>(settings);
+  const [isSendingTest, setIsSendingTest] = useState(false);
   const { toast } = useToast();
   const { t } = useTranslation();
 
+  const [needsAuth, setNeedsAuth] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
+
+  useEffect(() => {
+    const unsubscribe = initAuth(
+      (u, t) => {
+        setUser(u);
+        setToken(t);
+        setNeedsAuth(false);
+      },
+      () => setNeedsAuth(true)
+    );
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async () => {
+    setIsLoggingIn(true);
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setToken(result.accessToken);
+        setUser(result.user);
+        setNeedsAuth(false);
+      }
+    } catch (err) {
+      console.error('Login failed:', err);
+      toast({
+        title: 'Login failed',
+        description: 'Failed to authenticate with Google',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleDriveBackup = async () => {
+    if (!token) {
+      setNeedsAuth(true);
+      return;
+    }
+
+    setIsBackingUp(true);
+    try {
+      const res = await fetch('/api/backup/drive', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        toast({
+          title: 'Backup Successful',
+          description: 'Your database has been backed up to Google Drive.',
+        });
+      } else {
+        throw new Error('Backup failed');
+      }
+    } catch (error) {
+      console.error('Backup error:', error);
+      toast({
+        title: 'Backup Failed',
+        description: 'There was an error backing up to Google Drive.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
 
   const handleSettingChange = (key: keyof Settings, value: any) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
@@ -297,17 +371,26 @@ export default function SettingsPage() {
               <Separator />
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <Label>{t('settings.export.backup.label')}</Label>
+                  <Label>Google Drive Backup</Label>
                   <p className="text-sm text-muted-foreground">
-                    {t('settings.export.backup.description')}
+                    Save your SQLite database to your Google Drive.
                   </p>
                 </div>
-                <Switch 
-                  id="cloud-backup-switch"
-                  checked={localSettings.cloudBackup}
-                  onCheckedChange={(checked) => handleSettingChange('cloudBackup', checked)}
-                />
+                <div className="flex items-center space-x-2">
+                  {needsAuth || !user ? (
+                    <Button variant="outline" onClick={handleLogin} disabled={isLoggingIn}>
+                       {isLoggingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Cloud className="mr-2 h-4 w-4" />}
+                       Sign in with Google
+                    </Button>
+                  ) : (
+                    <Button variant="default" onClick={handleDriveBackup} disabled={isBackingUp}>
+                       {isBackingUp ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Cloud className="mr-2 h-4 w-4" />}
+                       Backup to Drive
+                    </Button>
+                  )}
+                </div>
               </div>
+              <Separator />
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
                   <Label>{t('settings.export.session.label')}</Label>
@@ -316,7 +399,7 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <Button variant="outline">
+                    <Button variant="outline" onClick={() => logout()}>
                         <LogOut className="mr-2" />
                         {t('settings.export.session.logout')}
                     </Button>

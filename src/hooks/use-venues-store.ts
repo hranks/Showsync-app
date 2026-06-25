@@ -5,44 +5,66 @@ export function useVenues() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  useEffect(() => {
+  const fetchVenues = useCallback(async () => {
     try {
-      const storedVenues = localStorage.getItem('dj_venues');
-      if (storedVenues) {
-        const parsed = JSON.parse(storedVenues);
-        const venuesData = parsed.sort((a: Venue, b: Venue) => a.name.localeCompare(b.name));
-        setVenues(venuesData);
+      const res = await fetch('/api/venues');
+      if (res.ok) {
+        const data = await res.json();
+        setVenues(data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
       }
     } catch (error) {
-      console.error("Error fetching venues from localStorage:", error);
+      console.error("Error fetching venues:", error);
     } finally {
       setIsInitialized(true);
     }
   }, []);
 
+  useEffect(() => {
+    fetchVenues();
+  }, [fetchVenues]);
+
   const addVenue = useCallback(async (venue: Omit<Venue, 'id'>) => {
-    setVenues(prev => {
-      const newVenue = { ...venue, id: crypto.randomUUID() };
-      const updated = [...prev, newVenue].sort((a, b) => a.name.localeCompare(b.name));
-      localStorage.setItem('dj_venues', JSON.stringify(updated));
-      return updated;
-    });
+    const newVenue = { ...venue, id: crypto.randomUUID() };
+    try {
+      const res = await fetch('/api/venues', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVenue)
+      });
+      if (res.ok) {
+        setVenues(prev => [...prev, newVenue].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+    } catch (error) {
+      console.error("Error adding venue:", error);
+    }
   }, []);
 
   const updateVenue = useCallback(async (updatedVenue: Venue) => {
-    setVenues(prev => {
-      const updated = prev.map(v => v.id === updatedVenue.id ? updatedVenue : v).sort((a, b) => a.name.localeCompare(b.name));
-      localStorage.setItem('dj_venues', JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      const res = await fetch('/api/venues', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updatedVenue)
+      });
+      if (res.ok) {
+        setVenues(prev => prev.map(v => v.id === updatedVenue.id ? updatedVenue : v).sort((a, b) => a.name.localeCompare(b.name)));
+      }
+    } catch (error) {
+      console.error("Error updating venue:", error);
+    }
   }, []);
 
   const deleteVenue = useCallback(async (venueId: string) => {
-    setVenues(prev => {
-      const updated = prev.filter(v => v.id !== venueId);
-      localStorage.setItem('dj_venues', JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      const res = await fetch(`/api/venues?id=${venueId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setVenues(prev => prev.filter(v => v.id !== venueId));
+      }
+    } catch (error) {
+      console.error("Error deleting venue:", error);
+    }
   }, []);
 
   return { venues, addVenue, updateVenue, deleteVenue, isInitialized };

@@ -5,48 +5,70 @@ export function useEvents() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  useEffect(() => {
+  const fetchEvents = useCallback(async () => {
     try {
-      const storedEvents = localStorage.getItem('dj_events');
-      if (storedEvents) {
-        const parsed = JSON.parse(storedEvents);
-        // Convert string formatted dates back to Date objects
-        const eventsData = parsed.map((e: any) => ({
+      const res = await fetch('/api/events');
+      if (res.ok) {
+        const data = await res.json();
+        const eventsData = data.map((e: any) => ({
           ...e,
           date: new Date(e.date)
         })).sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
         setEvents(eventsData);
       }
     } catch (error) {
-      console.error("Error fetching events from localStorage:", error);
+      console.error("Error fetching events:", error);
     } finally {
       setIsInitialized(true);
     }
   }, []);
 
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
   const addEvent = useCallback(async (event: Omit<Event, 'id'>) => {
-    setEvents(prev => {
-      const newEvent = { ...event, id: crypto.randomUUID() };
-      const updated = [newEvent, ...prev].sort((a, b) => b.date.getTime() - a.date.getTime());
-      localStorage.setItem('dj_events', JSON.stringify(updated));
-      return updated;
-    });
+    const newEvent = { ...event, id: crypto.randomUUID() };
+    try {
+      const res = await fetch('/api/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newEvent, date: newEvent.date.toISOString() })
+      });
+      if (res.ok) {
+        setEvents(prev => [newEvent, ...prev].sort((a, b) => b.date.getTime() - a.date.getTime()));
+      }
+    } catch (error) {
+      console.error("Error adding event:", error);
+    }
   }, []);
 
   const updateEvent = useCallback(async (updatedEvent: Event) => {
-    setEvents(prev => {
-      const updated = prev.map(e => e.id === updatedEvent.id ? updatedEvent : e).sort((a, b) => b.date.getTime() - a.date.getTime());
-      localStorage.setItem('dj_events', JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      const res = await fetch('/api/events', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...updatedEvent, date: updatedEvent.date.toISOString() })
+      });
+      if (res.ok) {
+        setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e).sort((a, b) => b.date.getTime() - a.date.getTime()));
+      }
+    } catch (error) {
+      console.error("Error updating event:", error);
+    }
   }, []);
 
   const deleteEvent = useCallback(async (eventId: string) => {
-    setEvents(prev => {
-      const updated = prev.filter(e => e.id !== eventId);
-      localStorage.setItem('dj_events', JSON.stringify(updated));
-      return updated;
-    });
+    try {
+      const res = await fetch(`/api/events?id=${eventId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setEvents(prev => prev.filter(e => e.id !== eventId));
+      }
+    } catch (error) {
+      console.error("Error deleting event:", error);
+    }
   }, []);
 
   return { events, addEvent, updateEvent, deleteEvent, isInitialized };
