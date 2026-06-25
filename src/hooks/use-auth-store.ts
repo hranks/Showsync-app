@@ -16,11 +16,13 @@ export function useAuthStore() {
   });
   const [isInitialized, setIsInitialized] = useState(false);
 
-  useEffect(() => {
+  const loadAuth = useCallback(() => {
     try {
       const storedAuth = localStorage.getItem('dj_auth');
       if (storedAuth) {
         setAuthState(JSON.parse(storedAuth));
+      } else {
+        setAuthState({ isAuthenticated: false, user: null });
       }
     } catch (error) {
       console.error("Error fetching auth from localStorage:", error);
@@ -29,16 +31,38 @@ export function useAuthStore() {
     }
   }, []);
 
+  useEffect(() => {
+    loadAuth();
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'dj_auth') {
+        loadAuth();
+      }
+    };
+    
+    // Custom event for same-window updates
+    const handleCustomChange = () => {
+      loadAuth();
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('dj_auth_change', handleCustomChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('dj_auth_change', handleCustomChange);
+    };
+  }, [loadAuth]);
+
   const login = useCallback((usernameOrEmail: string) => {
     const newState = { isAuthenticated: true, user: { usernameOrEmail } };
-    setAuthState(newState);
     localStorage.setItem('dj_auth', JSON.stringify(newState));
+    window.dispatchEvent(new Event('dj_auth_change'));
   }, []);
 
   const logout = useCallback(() => {
     const newState = { isAuthenticated: false, user: null };
-    setAuthState(newState);
     localStorage.setItem('dj_auth', JSON.stringify(newState));
+    window.dispatchEvent(new Event('dj_auth_change'));
   }, []);
 
   return { ...authState, login, logout, isInitialized };
