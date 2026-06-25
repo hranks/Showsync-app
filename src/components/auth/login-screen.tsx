@@ -19,13 +19,17 @@ export function LoginScreen() {
 
   useEffect(() => {
     // Seeding local database with the requested credentials
-    const users = localStorage.getItem('dj_users');
-    if (!users) {
-      localStorage.setItem('dj_users', JSON.stringify([{
+    const usersString = localStorage.getItem('dj_users');
+    let users = usersString ? JSON.parse(usersString) : [];
+    
+    const hasDefaultUser = users.some((u: any) => u.email === "ranksnica@gmail.com");
+    if (!hasDefaultUser) {
+      users.push({
         name: "Dj Ranks Nicaragua",
         email: "ranksnica@gmail.com",
         password: "palacios94@rk"
-      }]));
+      });
+      localStorage.setItem('dj_users', JSON.stringify(users));
     }
   }, []);
 
@@ -35,9 +39,11 @@ export function LoginScreen() {
     const usersString = localStorage.getItem('dj_users');
     const users = usersString ? JSON.parse(usersString) : [];
 
+    const normalizedIdentifier = identifier.trim().toLowerCase();
+
     const validUser = users.find((u: any) => 
-      (u.email === identifier.trim() || u.name === identifier.trim()) && 
-      u.password === password
+      (u.email.toLowerCase() === normalizedIdentifier || u.name.toLowerCase() === normalizedIdentifier) && 
+      u.password === password.trim()
     );
 
     if (validUser) {
