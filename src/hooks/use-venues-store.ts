@@ -2,69 +2,50 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Venue } from '@/types';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, query, orderBy } from 'firebase/firestore';
-
-// For this simple app, we'll use a hardcoded user ID.
-const userId = "default-user";
 
 export function useVenues() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
-
-    const venuesCollectionRef = collection(db, "users", userId, "venues");
-    const q = query(venuesCollectionRef, orderBy("name"));
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const venuesData = querySnapshot.docs.map(doc => {
-        const data = doc.data();
-        return {
-          id: doc.id,
-          ...data,
-        } as Venue;
-      });
-      setVenues(venuesData);
+    try {
+      const storedVenues = localStorage.getItem('dj_venues');
+      if (storedVenues) {
+        const parsed = JSON.parse(storedVenues);
+        const venuesData = parsed.sort((a: Venue, b: Venue) => a.name.localeCompare(b.name));
+        setVenues(venuesData);
+      }
+    } catch (error) {
+      console.error("Error fetching venues from localStorage:", error);
+    } finally {
       setIsInitialized(true);
-    }, (error) => {
-      console.error("Error fetching venues from Firestore:", error);
-      setIsInitialized(true);
-    });
-
-    return () => unsubscribe();
+    }
   }, []);
 
   const addVenue = useCallback(async (venue: Omit<Venue, 'id'>) => {
-    if (!userId) return;
-    try {
-      const venuesCollectionRef = collection(db, "users", userId, "venues");
-      await addDoc(venuesCollectionRef, venue);
-    } catch (error) {
-      console.error("Error adding venue to Firestore:", error);
-    }
+    setVenues(prev => {
+      const newVenue = { ...venue, id: crypto.randomUUID() };
+      const updated = [...prev, newVenue].sort((a, b) => a.name.localeCompare(b.name));
+      localStorage.setItem('dj_venues', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const updateVenue = useCallback(async (updatedVenue: Venue) => {
-    if (!userId || !updatedVenue.id) return;
-    try {
-      const venueRef = doc(db, "users", userId, "venues", updatedVenue.id);
-      const { id, ...dataToUpdate } = updatedVenue;
-      await updateDoc(venueRef, dataToUpdate);
-    } catch (error) {
-      console.error("Error updating venue in Firestore:", error);
-    }
+    if (!updatedVenue.id) return;
+    setVenues(prev => {
+      const updated = prev.map(v => v.id === updatedVenue.id ? updatedVenue : v).sort((a, b) => a.name.localeCompare(b.name));
+      localStorage.setItem('dj_venues', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const deleteVenue = useCallback(async (venueId: string) => {
-    if (!userId) return;
-    try {
-        const venueRef = doc(db, "users", userId, "venues", venueId);
-        await deleteDoc(venueRef);
-    } catch (error) {
-        console.error("Error deleting venue from Firestore:", error);
-    }
+    setVenues(prev => {
+      const updated = prev.filter(v => v.id !== venueId);
+      localStorage.setItem('dj_venues', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   return { venues, addVenue, updateVenue, deleteVenue, isInitialized };

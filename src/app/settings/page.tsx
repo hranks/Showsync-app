@@ -17,15 +17,11 @@ import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/types';
 import { useTranslation } from '@/hooks/use-translation';
 import { sendReport } from '@/ai/flows/send-report-flow';
-import { db } from '@/lib/firebase';
-import { doc, setDoc } from 'firebase/firestore';
-
 
 export default function SettingsPage() {
   const { settings, setSettings } = useSettingsStore();
   const [localSettings, setLocalSettings] = React.useState<Settings>(settings);
   const [isSendingTest, setIsSendingTest] = React.useState(false);
-  const [isTestingFirestore, setIsTestingFirestore] = React.useState(false);
   const { toast } = useToast();
   const { t } = useTranslation();
 
@@ -79,31 +75,6 @@ export default function SettingsPage() {
       setIsSendingTest(false);
     }
   };
-
-  const handleTestFirestore = async () => {
-    setIsTestingFirestore(true);
-    try {
-        const testDocRef = doc(db, "users/default-user/test/connection-test");
-        await setDoc(testDocRef, {
-            timestamp: new Date(),
-            status: 'ok',
-        });
-        toast({
-            title: t('settings.toast.firestore.success.title'),
-            description: t('settings.toast.firestore.success.description'),
-        });
-    } catch (error) {
-        console.error("Firestore connection test failed:", error);
-        toast({
-            title: t('settings.toast.firestore.error.title'),
-            description: t('settings.toast.firestore.error.description'),
-            variant: 'destructive',
-        });
-    } finally {
-        setIsTestingFirestore(false);
-    }
-  };
-
 
   return (
     <AppLayout>
@@ -162,24 +133,6 @@ export default function SettingsPage() {
                   </Button>
                 </div>
               </div>
-
-               <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <Label>{t('settings.general.connection.label')}</Label>
-                   <p className="text-sm text-muted-foreground">
-                     {t('settings.general.connection.description')}
-                  </p>
-                </div>
-                  <Button variant="outline" onClick={handleTestFirestore} disabled={isTestingFirestore}>
-                    {isTestingFirestore ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                       <Database className="mr-2 h-4 w-4" />
-                    )}
-                    {t('settings.general.connection.button')}
-                  </Button>
-              </div>
-
 
               <div className="flex items-center justify-between">
                 <div className="space-y-1">

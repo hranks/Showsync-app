@@ -4,6 +4,7 @@
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { useSettingsStore } from '@/hooks/use-settings-store';
+import { AuthGuard } from '@/components/auth/auth-guard';
 import React from 'react';
 import { Inter } from 'next/font/google';
 
@@ -51,7 +52,9 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className={`${inter.variable} font-sans antialiased`} suppressHydrationWarning>
-        {children}
+        <AuthGuard>
+          {children}
+        </AuthGuard>
         <Toaster />
       </body>
     </html>

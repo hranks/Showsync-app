@@ -228,7 +228,7 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
           render={({ field }) => (
             <FormItem className="flex flex-col">
               <FormLabel>{t('addEventForm.date')}</FormLabel>
-              <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+              <Popover modal={true} open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                 <PopoverTrigger asChild>
                   <FormControl>
                     <Button

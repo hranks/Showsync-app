@@ -2,81 +2,53 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Event } from '@/types';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, addDoc, updateDoc, doc, deleteDoc, Timestamp, query } from 'firebase/firestore';
-
-// For this simple app, we'll use a hardcoded user ID.
-// In a real multi-user app, you would get this from an authentication service.
-const userId = "default-user";
 
 export function useEvents() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
-    if (!userId) return;
-
-    const eventsCollectionRef = collection(db, "users", userId, "events");
-    const q = query(eventsCollectionRef);
-
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const eventsData = querySnapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-            id: doc.id,
-            ...data,
-            date: (data.date as Timestamp).toDate(),
-            } as Event;
-        });
-        // Sort the events on the client side after fetching.
-        eventsData.sort((a, b) => b.date.getTime() - a.date.getTime());
+    try {
+      const storedEvents = localStorage.getItem('dj_events');
+      if (storedEvents) {
+        const parsed = JSON.parse(storedEvents);
+        // Convert string formatted dates back to Date objects
+        const eventsData = parsed.map((e: any) => ({
+          ...e,
+          date: new Date(e.date)
+        })).sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
         setEvents(eventsData);
-        setIsInitialized(true);
-    }, (error) => {
-      console.error("Error fetching events from Firestore:", error);
-      setIsInitialized(true); // Still mark as initialized to not block UI
-    });
-
-    return () => unsubscribe();
+      }
+    } catch (error) {
+      console.error("Error fetching events from localStorage:", error);
+    } finally {
+      setIsInitialized(true);
+    }
   }, []);
 
   const addEvent = useCallback(async (event: Omit<Event, 'id'>) => {
-    if (!userId) return;
-    try {
-      const eventsCollectionRef = collection(db, "users", userId, "events");
-      // Convert JavaScript Date to Firestore Timestamp before saving
-      await addDoc(eventsCollectionRef, {
-        ...event,
-        date: Timestamp.fromDate(event.date),
-      });
-    } catch (error) {
-      console.error("Error adding event to Firestore:", error);
-    }
+    setEvents(prev => {
+      const newEvent = { ...event, id: crypto.randomUUID() };
+      const updated = [newEvent, ...prev].sort((a, b) => b.date.getTime() - a.date.getTime());
+      localStorage.setItem('dj_events', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const updateEvent = useCallback(async (updatedEvent: Event) => {
-    if (!userId) return;
-    try {
-      const eventRef = doc(db, "users", userId, "events", updatedEvent.id);
-      // Omit id from the object to be updated and convert date
-      const { id, ...dataToUpdate } = updatedEvent;
-      await updateDoc(eventRef, {
-        ...dataToUpdate,
-        date: Timestamp.fromDate(updatedEvent.date),
-      });
-    } catch (error) {
-      console.error("Error updating event in Firestore:", error);
-    }
+    setEvents(prev => {
+      const updated = prev.map(e => e.id === updatedEvent.id ? updatedEvent : e).sort((a, b) => b.date.getTime() - a.date.getTime());
+      localStorage.setItem('dj_events', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const deleteEvent = useCallback(async (eventId: string) => {
-    if (!userId) return;
-    try {
-        const eventRef = doc(db, "users", userId, "events", eventId);
-        await deleteDoc(eventRef);
-    } catch (error) {
-        console.error("Error deleting event from Firestore:", error);
-    }
+    setEvents(prev => {
+      const updated = prev.filter(e => e.id !== eventId);
+      localStorage.setItem('dj_events', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   return { events, addEvent, updateEvent, deleteEvent, isInitialized };

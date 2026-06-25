@@ -12,10 +12,13 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { SidebarNav } from './sidebar-nav';
-import { DiscAlbum } from 'lucide-react';
+import { DiscAlbum, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuthStore } from '@/hooks/use-auth-store';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
+  const { logout } = useAuthStore();
+  
   return (
     <SidebarProvider defaultOpen>
       <div className="flex min-h-screen">
@@ -29,8 +32,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <SidebarContent>
             <SidebarNav />
           </SidebarContent>
-          <SidebarFooter>
-            {/* Can add user profile or settings here */}
+          <SidebarFooter className="p-4">
+            <Button variant="ghost" className="w-full justify-start text-muted-foreground" onClick={logout}>
+              <LogOut className="mr-2 h-4 w-4" />
+              Cerrar sesión
+            </Button>
           </SidebarFooter>
         </Sidebar>
         <SidebarInset>
