@@ -1,21 +1,14 @@
-'use client';
-
 import { useState, useEffect, useCallback } from 'react';
 import type { Settings } from '@/types';
 
 const defaultSettings: Settings = {
   language: 'en',
-  reportEmail: '',
   theme: 'dark',
-  username: 'DJ Cool',
-  notifications: true,
-  reminderTime: '60',
-  exportFrequency: 'monthly',
-  exportMethod: null,
-  cloudBackup: false,
+  currency: 'USD',
+  dateFormat: 'MM/DD/YYYY'
 };
 
-export function useSettingsStore() {
+export function useSettings() {
   const [settings, setSettingsState] = useState<Settings>(defaultSettings);
   const [isInitialized, setIsInitialized] = useState(false);
 
