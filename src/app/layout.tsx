@@ -6,11 +6,21 @@ import { Toaster } from "@/components/ui/toaster";
 import { useSettingsStore } from '@/hooks/use-settings-store';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import React from 'react';
-import { Inter } from 'next/font/google';
+import { Inter, Space_Grotesk, JetBrains_Mono } from 'next/font/google';
 
 const inter = Inter({
   subsets: ['latin'],
   variable: '--font-sans',
+});
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-display',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
 });
 
 export default function RootLayout({
@@ -27,7 +37,7 @@ export default function RootLayout({
       if (typeof window !== 'undefined' && currentTheme === 'system') {
         currentTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
       }
-      document.documentElement.className = currentTheme;
+      document.documentElement.className = `${currentTheme} ${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`;
       document.documentElement.lang = settings.language;
     }
   }, [settings.theme, settings.language, isInitialized]);
@@ -35,8 +45,22 @@ export default function RootLayout({
   // Render a consistent skeleton on both server and client during the initial render.
   // The useEffect will then apply the correct theme and language on the client.
   return (
-    <html lang={settings.language || 'en'} className={settings.theme || 'dark'} suppressHydrationWarning>
+    <html lang={settings.language || 'en'} className={`${settings.theme || 'dark'} ${inter.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: `
+          try {
+            if (typeof window !== 'undefined') {
+              const originalFetch = window.fetch;
+              Object.defineProperty(window, 'fetch', {
+                value: originalFetch,
+                writable: true,
+                configurable: true
+              });
+            }
+          } catch (e) {
+            console.warn("Could not patch window.fetch:", e);
+          }
+        ` }} />
         <title>DJ Ledger</title>
         <meta name="description" content="Track your DJ gigs, earnings, and hours." />
         <meta name="application-name" content="DJ Ledger" />

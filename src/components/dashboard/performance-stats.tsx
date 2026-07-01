@@ -91,44 +91,52 @@ export function PerformanceStats({ events }: PerformanceStatsProps) {
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <Card>
+      <Card className="overflow-hidden border-border bg-card/40 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">{t('dashboard.stats.monthlyIncome')}</CardTitle>
-          <Banknote className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="font-display text-xs font-semibold tracking-wider text-muted-foreground uppercase">{t('dashboard.stats.monthlyIncome')}</CardTitle>
+          <div className="p-2 rounded-lg bg-primary/10">
+            <Banknote className="h-4 w-4 text-primary" />
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(stats.totalIncome)}</div>
-          <p className="text-xs text-muted-foreground">{t('dashboard.stats.gigsCount', {count: stats.totalGigs})}</p>
+        <CardContent className="pt-2">
+          <div className="font-mono text-3xl font-semibold tracking-tight text-foreground">{formatCurrency(stats.totalIncome)}</div>
+          <p className="text-xs text-muted-foreground mt-1">{t('dashboard.stats.gigsCount', {count: stats.totalGigs})}</p>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="overflow-hidden border-border bg-card/40 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 hover:border-accent/20">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">{t('dashboard.stats.monthlyHours')}</CardTitle>
-          <Clock className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="font-display text-xs font-semibold tracking-wider text-muted-foreground uppercase">{t('dashboard.stats.monthlyHours')}</CardTitle>
+          <div className="p-2 rounded-lg bg-accent/10">
+            <Clock className="h-4 w-4 text-accent" />
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{stats.totalHours}</div>
-          <p className="text-xs text-muted-foreground">{t('dashboard.stats.hoursWorked')}</p>
+        <CardContent className="pt-2">
+          <div className="font-mono text-3xl font-semibold tracking-tight text-foreground">{stats.totalHours}</div>
+          <p className="text-xs text-muted-foreground mt-1">{t('dashboard.stats.hoursWorked')}</p>
         </CardContent>
       </Card>
-       <Card>
+       <Card className="overflow-hidden border-border bg-card/40 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-primary/5 hover:border-primary/20">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">{t('dashboard.stats.totalGigs')}</CardTitle>
-          <BarChart className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="font-display text-xs font-semibold tracking-wider text-muted-foreground uppercase">{t('dashboard.stats.totalGigs')}</CardTitle>
+          <div className="p-2 rounded-lg bg-primary/10">
+            <BarChart className="h-4 w-4 text-primary" />
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">+{stats.totalGigs}</div>
-          <p className="text-xs text-muted-foreground">{t('dashboard.stats.eventsPlayed')}</p>
+        <CardContent className="pt-2">
+          <div className="font-mono text-3xl font-semibold tracking-tight text-foreground">+{stats.totalGigs}</div>
+          <p className="text-xs text-muted-foreground mt-1">{t('dashboard.stats.eventsPlayed')}</p>
         </CardContent>
       </Card>
-      <Card>
+      <Card className="overflow-hidden border-border bg-card/40 backdrop-blur-sm transition-all duration-300 hover:shadow-lg hover:shadow-accent/5 hover:border-accent/20">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">{t('dashboard.stats.avgRate')}</CardTitle>
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="font-display text-xs font-semibold tracking-wider text-muted-foreground uppercase">{t('dashboard.stats.avgRate')}</CardTitle>
+          <div className="p-2 rounded-lg bg-accent/10">
+            <TrendingUp className="h-4 w-4 text-accent" />
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{formatCurrency(stats.avgPerHour)}/hr</div>
-          <p className="text-xs text-muted-foreground">{t('dashboard.stats.avgRateDescription')}</p>
+        <CardContent className="pt-2">
+          <div className="font-mono text-3xl font-semibold tracking-tight text-foreground">{formatCurrency(stats.avgPerHour)}<span className="text-sm font-medium text-muted-foreground">/hr</span></div>
+          <p className="text-xs text-muted-foreground mt-1">{t('dashboard.stats.avgRateDescription')}</p>
         </CardContent>
       </Card>
     </div>
