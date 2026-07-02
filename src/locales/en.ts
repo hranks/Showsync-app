@@ -272,6 +272,7 @@ export const en = {
     viewReportDialog: {
         description: 'A preview of your generated report.',
         print: 'Print',
+        exportPdf: 'Export PDF',
     },
     // Add Venue Dialog
     addVenueDialog: {
