@@ -2,7 +2,6 @@
 'use client';
 
 import React from 'react';
-import { Outlet } from 'react-router-dom';
 import {
   SidebarProvider,
   Sidebar,
@@ -17,7 +16,7 @@ import { DiscAlbum, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/hooks/use-auth-store';
 
-export function AppLayout() {
+export function AppLayout({ children }: { children: React.ReactNode }) {
   const { logout } = useAuthStore();
   
   return (
@@ -68,7 +67,7 @@ export function AppLayout() {
                     <h1 className="text-lg font-bold">DJ Ledger</h1>
                 </div>
             </header>
-            <Outlet />
+            {children}
         </SidebarInset>
       </div>
     </SidebarProvider>

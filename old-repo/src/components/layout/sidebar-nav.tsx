@@ -1,14 +1,14 @@
 'use client';
 
-import { Link, useLocation } from 'react-router-dom';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { buttonVariants } from '@/components/ui/button';
 import { LayoutDashboard, CalendarDays, Banknote, FileText, Settings } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 
 export function SidebarNav() {
-  const location = useLocation();
-  const pathname = location.pathname;
+  const pathname = usePathname();
   const { t } = useTranslation();
 
   const links = [
@@ -44,7 +44,7 @@ export function SidebarNav() {
       {links.map((link) => (
         <Link
           key={link.name}
-          to={link.href}
+          href={link.href}
           className={cn(
             buttonVariants({
               variant: pathname === link.href ? 'default' : 'ghost',
