@@ -109,7 +109,8 @@ export default function SettingsPage() {
   };
   
   const handleSave = () => {
-    setSettings(localSettings);
+    const updatedSettings = { ...localSettings, exportMethod: 'download' as const };
+    setSettings(updatedSettings);
     toast({
       title: t('settings.toast.save.title'),
       description: t('settings.toast.save.description'),
@@ -182,31 +183,7 @@ export default function SettingsPage() {
                 </Select>
               </div>
 
-              <div className="flex items-center justify-between">
-                 <div className="space-y-1">
-                    <Label htmlFor="report-email">{t('settings.general.reportEmail.label')}</Label>
-                    <p className="text-sm text-muted-foreground">
-                        {t('settings.general.reportEmail.description')}
-                    </p>
-                 </div>
-                <div className="flex items-center gap-2 w-auto">
-                  <Input 
-                    id="report-email" 
-                    type="email" 
-                    placeholder="you@example.com" 
-                    className="w-[240px]"
-                    value={localSettings.reportEmail}
-                    onChange={(e) => handleSettingChange('reportEmail', e.target.value)}
-                  />
-                  <Button variant="outline" onClick={handleSendTestEmail} disabled={isSendingTest}>
-                    {isSendingTest ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                        <Mail className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
+
 
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
@@ -342,31 +319,15 @@ export default function SettingsPage() {
                     </div>
                     <div className="flex items-center space-x-2">
                         <Button 
-                            variant={localSettings.exportMethod === 'email' ? 'default' : 'outline'}
-                            className="w-[120px]"
-                            onClick={() => handleSettingChange('exportMethod', 'email')}
-                        >
-                            <Mail className="mr-2" />
-                            {t('settings.export.method.email')}
-                        </Button>
-                        <Button 
-                            variant={localSettings.exportMethod === 'download' ? 'default' : 'outline'}
+                            variant="default"
                             className="w-[120px]"
                             onClick={() => handleSettingChange('exportMethod', 'download')}
                         >
-                            <Download className="mr-2" />
+                            <Download className="mr-2 h-4 w-4" />
                             {t('settings.export.method.download')}
                         </Button>
                     </div>
                 </div>
-                {localSettings.exportMethod === 'email' && (
-                    <div className="flex items-center justify-end">
-                        <div className="flex items-center gap-2 w-[380px]">
-                            <Input id="alternative-email" type="email" placeholder={t('settings.export.method.altEmail')} className="flex-1" />
-                            <Button variant="secondary">{t('settings.export.method.send')}</Button>
-                        </div>
-                    </div>
-                )}
               </div>
               <Separator />
               <div className="flex items-center justify-between">

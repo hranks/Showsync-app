@@ -189,6 +189,53 @@ async function startServer() {
     }
   });
 
+  app.post("/api/backup/drive", async (req, res) => {
+    try {
+      const authHeader = req.headers['authorization'];
+      if (!authHeader) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const dbPath = path.join(process.cwd(), 'database.json');
+      try {
+        await fs.access(dbPath);
+      } catch {
+        return res.status(404).json({ error: 'Database not found' });
+      }
+
+      const fileContent = await fs.readFile(dbPath, 'utf-8');
+      
+      const metadata = {
+        name: 'DJ-Ledger-Backup-database.json',
+        mimeType: 'application/json',
+      };
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', new Blob([fileContent], { type: 'application/json' }));
+
+      const driveRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+        method: 'POST',
+        headers: {
+          Authorization: authHeader,
+        },
+        body: form,
+      });
+
+      if (!driveRes.ok) {
+        const errorText = await driveRes.text();
+        console.error('Drive API Error:', errorText);
+        return res.status(500).json({ error: 'Failed to upload to Google Drive' });
+      }
+
+      const data = await driveRes.json() as { id: string };
+      res.json({ success: true, fileId: data.id });
+    } catch (error) {
+      console.error('Backup API Error:', error);
+      res.status(500).json({ error: 'Failed to complete backup' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
