@@ -10,6 +10,7 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 // Request Workspace scopes
 provider.addScope('https://www.googleapis.com/auth/drive.file');
+provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = null;

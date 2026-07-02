@@ -1,9 +1,34 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Venue } from '@/types';
+import { getAccessToken } from '@/lib/auth';
+import { syncDataToSheet } from '@/lib/sheets';
 
 export function useVenues() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
+
+  const triggerSync = useCallback(async (updatedVenues: Venue[]) => {
+    const token = await getAccessToken();
+    const settingsStr = localStorage.getItem('dj_settings');
+    if (!token || !settingsStr) return;
+    try {
+      const settings = JSON.parse(settingsStr);
+      if (settings.sheetsSyncEnabled && settings.spreadsheetId) {
+        const eventsRes = await fetch('/api/events');
+        if (eventsRes.ok) {
+          const eventsData = await eventsRes.json();
+          const events = eventsData.map((e: any) => ({
+            ...e,
+            date: new Date(e.date)
+          }));
+          await syncDataToSheet(token, settings.spreadsheetId, events, updatedVenues);
+          console.log('Background sync to Google Sheets completed successfully.');
+        }
+      }
+    } catch (err) {
+      console.error('Background sync failed:', err);
+    }
+  }, []);
 
   const fetchVenues = useCallback(async () => {
     try {
@@ -32,12 +57,14 @@ export function useVenues() {
         body: JSON.stringify(newVenue)
       });
       if (res.ok) {
-        setVenues(prev => [...prev, newVenue].sort((a, b) => a.name.localeCompare(b.name)));
+        const newVenuesList = [...venues, newVenue].sort((a, b) => a.name.localeCompare(b.name));
+        setVenues(newVenuesList);
+        triggerSync(newVenuesList);
       }
     } catch (error) {
       console.error("Error adding venue:", error);
     }
-  }, []);
+  }, [venues, triggerSync]);
 
   const updateVenue = useCallback(async (updatedVenue: Venue) => {
     try {
@@ -47,12 +74,14 @@ export function useVenues() {
         body: JSON.stringify(updatedVenue)
       });
       if (res.ok) {
-        setVenues(prev => prev.map(v => v.id === updatedVenue.id ? updatedVenue : v).sort((a, b) => a.name.localeCompare(b.name)));
+        const newVenuesList = venues.map(v => v.id === updatedVenue.id ? updatedVenue : v).sort((a, b) => a.name.localeCompare(b.name));
+        setVenues(newVenuesList);
+        triggerSync(newVenuesList);
       }
     } catch (error) {
       console.error("Error updating venue:", error);
     }
-  }, []);
+  }, [venues, triggerSync]);
 
   const deleteVenue = useCallback(async (venueId: string) => {
     try {
@@ -60,12 +89,14 @@ export function useVenues() {
         method: 'DELETE',
       });
       if (res.ok) {
-        setVenues(prev => prev.filter(v => v.id !== venueId));
+        const newVenuesList = venues.filter(v => v.id !== venueId);
+        setVenues(newVenuesList);
+        triggerSync(newVenuesList);
       }
     } catch (error) {
       console.error("Error deleting venue:", error);
     }
-  }, []);
+  }, [venues, triggerSync]);
 
   return { venues, addVenue, updateVenue, deleteVenue, isInitialized };
 }

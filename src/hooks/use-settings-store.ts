@@ -5,7 +5,16 @@ const defaultSettings: Settings = {
   language: 'en',
   theme: 'dark',
   currency: 'USD',
-  dateFormat: 'MM/DD/YYYY'
+  dateFormat: 'MM/DD/YYYY',
+  sheetsSyncEnabled: false,
+  spreadsheetId: '',
+  reportEmail: '',
+  username: '',
+  notifications: false,
+  reminderTime: '15',
+  exportFrequency: 'weekly',
+  exportMethod: null,
+  cloudBackup: false
 };
 
 export function useSettingsStore() {

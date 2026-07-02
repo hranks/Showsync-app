@@ -34,4 +34,6 @@ export interface Settings {
   exportFrequency: 'weekly' | 'monthly' | 'annually';
   exportMethod: 'email' | 'download' | null;
   cloudBackup: boolean;
+  spreadsheetId?: string;
+  sheetsSyncEnabled?: boolean;
 }

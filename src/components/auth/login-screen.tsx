@@ -257,13 +257,7 @@ export function LoginScreen() {
             </div>
           </div>
           
-          {/* Hint for Demo */}
-          <div className="text-center pt-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono bg-muted text-muted-foreground border border-border">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-              PIN demo: <strong className="text-foreground tracking-wider font-semibold">309410</strong>
-            </span>
-          </div>
+
         </CardContent>
       </Card>
     </div>
