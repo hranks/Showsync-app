@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import fs from "fs/promises";
 import { createServer as createViteServer } from "vite";
-import * as Brevo from "@getbrevo/brevo";
 import { format } from "date-fns";
 
 const DB_PATH = path.join(process.cwd(), 'database.json');
@@ -28,7 +27,7 @@ async function saveDb(data: DatabaseSchema): Promise<void> {
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = process.env.PORT || 3000;
 
   app.use(express.json());
 
@@ -133,58 +132,13 @@ async function startServer() {
 
   app.post("/api/send-report", async (req, res) => {
     try {
-      if (!process.env.BREVO_API_KEY || !process.env.BREVO_FROM_EMAIL) {
-        throw new Error('The email sending service is not configured. Please add BREVO_API_KEY and BREVO_FROM_EMAIL to your .env file.');
-      }
-
       const { email, report } = req.body;
-      const apiInstance = new Brevo.TransactionalEmailsApi();
-      apiInstance.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
-
-      const formatCurrency = (amount: number, currency: 'USD' | 'NIO') => {
-        if (currency === 'USD') {
-            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-        }
-        return `C$${amount.toFixed(2)}`;
-      }
-
-      const eventsHtml = report.events?.map((event: any) => `
-          <tr>
-              <td style="padding: 8px; border: 1px solid #ddd;">${format(new Date(event.date), 'MMM d, yyyy')}</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${event.venueName}</td>
-              <td style="padding: 8px; border: 1px solid #ddd;">${formatCurrency(event.totalEarnings, 'USD')}</td>
-          </tr>
-      `).join('') || '<tr><td colspan="3">No events in this report.</td></tr>';
-      
-      const sendSmtpEmail = new Brevo.SendSmtpEmail();
-      sendSmtpEmail.to = [{ email: email }];
-      sendSmtpEmail.sender = { email: process.env.BREVO_FROM_EMAIL, name: 'DJ Ledger' };
-      sendSmtpEmail.subject = `Your DJ Ledger Report: ${report.title}`;
-      sendSmtpEmail.htmlContent = `
-          <h1>${report.title}</h1>
-          <p>Here is a summary of the events for this report:</p>
-          <table style="width: 100%; border-collapse: collapse;">
-              <thead>
-                  <tr>
-                      <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Date</th>
-                      <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Venue</th>
-                      <th style="padding: 8px; border: 1px solid #ddd; text-align: left;">Earnings</th>
-                  </tr>
-              </thead>
-              <tbody>
-                  ${eventsHtml}
-              </tbody>
-          </table>
-          <br/>
-          <p>Sent from your DJ Ledger application.</p>
-      `;
-
-      await apiInstance.sendTransacEmail(sendSmtpEmail);
-      res.json({ success: true });
+      console.log(`[MOCK EMAIL] Simulating sending report "${report.title}" to ${email}`);
+      res.json({ success: true, message: 'Report generated successfully (Simulation mode).' });
     } catch (error: any) {
       console.error('Error sending report:', error);
       res.status(500).json({ 
-        message: error.message || 'Failed to send the report email.' 
+        message: error.message || 'Failed to send the report.' 
       });
     }
   });
