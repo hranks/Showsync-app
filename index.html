@@ -1,6 +1,27 @@
 <!doctype html>
 <html lang="es">
   <head>
+    <script>
+      (function() {
+        var originalFetch = window.fetch;
+        var currentFetch = originalFetch;
+        try {
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return currentFetch;
+            },
+            set: function(val) {
+              console.warn('Captured window.fetch assignment');
+              currentFetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          console.warn('Could not define window.fetch property:', e);
+        }
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>DJ Manager App</title>
