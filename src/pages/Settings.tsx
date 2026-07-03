@@ -19,7 +19,7 @@ import { useTranslation } from '@/hooks/use-translation';
 import { sendReport } from '@/ai/flows/send-report-flow';
 import { initAuth, googleSignIn, getAccessToken, logout } from '@/lib/auth';
 import type { User } from 'firebase/auth';
-import { createSpreadsheet, syncDataToSheet } from '@/lib/sheets';
+import { createSpreadsheet, syncDataToSheet, fetchDataFromSheet } from '@/lib/sheets';
 import { useEvents } from '@/hooks/use-events-store';
 import { useVenues } from '@/hooks/use-venues-store';
 
@@ -35,6 +35,7 @@ export default function SettingsPage() {
   const [user, setUser] = useState<User | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   const { events } = useEvents();
   const { venues } = useVenues();
@@ -189,6 +190,58 @@ export default function SettingsPage() {
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleRestoreFromSheets = async () => {
+    const isEs = localSettings.language === 'es';
+    if (!token) {
+      setNeedsAuth(true);
+      return;
+    }
+    const sheetId = localSettings.spreadsheetId;
+    if (!sheetId) return;
+
+    setIsRestoring(true);
+    try {
+      const data = await fetchDataFromSheet(token, sheetId);
+      if (!data) {
+        throw new Error('No data found or failed to fetch');
+      }
+
+      const response = await fetch('/api/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          events: data.events.map(e => ({ ...e, date: e.date.toISOString() })),
+          venues: data.venues
+        })
+      });
+
+      if (response.ok) {
+        toast({
+          title: isEs ? 'Restauración Exitosa' : 'Restore Successful',
+          description: isEs 
+            ? `Se han recuperado ${data.events.length} eventos y ${data.venues.length} locales desde Google Sheets.` 
+            : `Successfully restored ${data.events.length} events and ${data.venues.length} venues from Google Sheets.`,
+        });
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        throw new Error('Failed to overwrite local database');
+      }
+    } catch (error) {
+      console.error('Error restoring from spreadsheet:', error);
+      toast({
+        title: isEs ? 'Error de Restauración' : 'Restore Failed',
+        description: isEs 
+          ? 'No se pudieron recuperar los datos de Google Sheets. Asegúrate de que el archivo tenga el formato correcto.' 
+          : 'Failed to restore data from Google Sheets. Make sure the spreadsheet has the correct format.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRestoring(false);
     }
   };
 
@@ -601,6 +654,29 @@ export default function SettingsPage() {
                         >
                           {localSettings.language === 'es' ? 'Desvincular' : 'Unlink'}
                         </Button>
+                      </div>
+
+                      <div className="pt-2">
+                        <Button
+                          variant="outline"
+                          className="w-full border-green-500/30 hover:bg-green-500/10 text-green-600 dark:text-green-400"
+                          onClick={handleRestoreFromSheets}
+                          disabled={isRestoring}
+                        >
+                          {isRestoring ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <Download className="mr-2 h-4 w-4" />
+                          )}
+                          {localSettings.language === 'es' 
+                            ? 'Restaurar / Importar Datos desde Google Sheets' 
+                            : 'Restore / Import Data from Google Sheets'}
+                        </Button>
+                        <p className="text-xs text-muted-foreground mt-1 text-center">
+                          {localSettings.language === 'es'
+                            ? 'Recupera tus eventos y locales guardados en Google Sheets en caso de que se hayan borrado.'
+                            : 'Recover your saved events and venues from Google Sheets in case they were cleared.'}
+                        </p>
                       </div>
                     </div>
                   ) : (

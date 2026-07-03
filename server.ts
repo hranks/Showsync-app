@@ -157,6 +157,23 @@ async function startServer() {
     }
   });
 
+  app.post("/api/import", async (req, res) => {
+    try {
+      const { events, venues } = req.body;
+      const db = await getDb();
+      if (events && Array.isArray(events)) {
+        db.events = events;
+      }
+      if (venues && Array.isArray(venues)) {
+        db.venues = venues;
+      }
+      await saveDb(db);
+      res.json({ success: true, eventsCount: db.events.length, venuesCount: db.venues.length });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to import/restore database' });
+    }
+  });
+
   app.post("/api/send-report", async (req, res) => {
     try {
       const { email, report } = req.body;

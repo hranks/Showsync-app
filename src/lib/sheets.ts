@@ -159,3 +159,86 @@ export async function syncDataToSheet(
     throw new Error('Failed to write venues data to Google Sheets');
   }
 }
+
+// Fetch events and venues from Google Sheets to restore database
+export async function fetchDataFromSheet(
+  accessToken: string,
+  spreadsheetId: string
+): Promise<{ events: Event[]; venues: Venue[] } | null> {
+  try {
+    // 1. Fetch Eventos
+    const eventsRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Eventos!A2:O10000`,
+      {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }
+    );
+    let events: Event[] = [];
+    if (eventsRes.ok) {
+      const data = await eventsRes.json();
+      const rows = data.values || [];
+      events = rows.map((row: any[]) => {
+        let parsedDate = new Date();
+        if (row[1]) {
+          const parts = row[1].split('/');
+          if (parts.length === 3) {
+            const p1 = parseInt(parts[0], 10);
+            const p2 = parseInt(parts[1], 10);
+            const y = parseInt(parts[2], 10);
+            if (p1 > 12) {
+              parsedDate = new Date(y, p2 - 1, p1);
+            } else {
+              parsedDate = new Date(y, p1 - 1, p2);
+            }
+          } else {
+            parsedDate = new Date(row[1]);
+          }
+        }
+        if (isNaN(parsedDate.getTime())) {
+          parsedDate = new Date();
+        }
+
+        return {
+          id: row[0] || crypto.randomUUID(),
+          date: parsedDate,
+          startTime: row[2] || '',
+          endTime: row[3] || '',
+          venueName: row[4] || '',
+          eventType: (row[5] || 'Club') as any,
+          hours: parseFloat(row[6]) || 0,
+          overtimeHours: parseFloat(row[7]) || 0,
+          rate: parseFloat(row[8]) || 0,
+          totalEarnings: parseFloat(row[9]) || 0,
+          paymentAdvanceNIO: parseFloat(row[10]) || 0,
+          paymentAdvanceUSD: parseFloat(row[11]) || 0,
+          consumptionsNIO: parseFloat(row[12]) || 0,
+          consumptionsUSD: parseFloat(row[13]) || 0,
+          notes: row[14] || ''
+        };
+      });
+    }
+
+    // 2. Fetch Locales
+    const venuesRes = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Locales!A2:C1000`,
+      {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      }
+    );
+    let venues: Venue[] = [];
+    if (venuesRes.ok) {
+      const data = await venuesRes.json();
+      const rows = data.values || [];
+      venues = rows.map((row: any[]) => ({
+        id: row[0] || crypto.randomUUID(),
+        name: row[1] || '',
+        type: (row[2] || 'Club') as any
+      }));
+    }
+
+    return { events, venues };
+  } catch (error) {
+    console.error("Error fetching data from sheet:", error);
+    return null;
+  }
+}
