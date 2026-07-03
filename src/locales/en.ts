@@ -149,6 +149,7 @@ export const en = {
             frequency: {
                 label: 'Report Export Frequency',
                 description: 'Choose how often to automatically export reports.',
+                daily: 'Daily',
                 weekly: 'Weekly',
                 monthly: 'Monthly',
                 annually: 'Annually',

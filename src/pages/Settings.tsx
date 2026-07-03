@@ -80,8 +80,34 @@ export default function SettingsPage() {
     }
   };
 
+  const ensureToken = async (): Promise<string | null> => {
+    let currentToken = token;
+    if (!currentToken) {
+      currentToken = await getAccessToken();
+    }
+    if (!currentToken) {
+      setIsLoggingIn(true);
+      try {
+        const result = await googleSignIn();
+        if (result) {
+          setToken(result.accessToken);
+          setUser(result.user);
+          setNeedsAuth(false);
+          return result.accessToken;
+        }
+      } catch (err) {
+        console.error('Auto login / Token retrieval failed:', err);
+      } finally {
+        setIsLoggingIn(false);
+      }
+      return null;
+    }
+    return currentToken;
+  };
+
   const handleDriveBackup = async () => {
-    if (!token) {
+    const activeToken = await ensureToken();
+    if (!activeToken) {
       setNeedsAuth(true);
       return;
     }
@@ -91,7 +117,7 @@ export default function SettingsPage() {
       const res = await fetch('/api/backup/drive', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${activeToken}`
         }
       });
       if (res.ok) {
@@ -116,13 +142,14 @@ export default function SettingsPage() {
 
   const handleCreateSpreadsheet = async () => {
     const isEs = localSettings.language === 'es';
-    if (!token) {
+    const activeToken = await ensureToken();
+    if (!activeToken) {
       setNeedsAuth(true);
       return;
     }
     setIsCreatingSheet(true);
     try {
-      const sheetId = await createSpreadsheet(token);
+      const sheetId = await createSpreadsheet(activeToken);
       
       const updated = {
         ...localSettings,
@@ -139,7 +166,7 @@ export default function SettingsPage() {
           : 'Google Spreadsheet created. Starting data sync...',
       });
 
-      await syncDataToSheet(token, sheetId, events, venues);
+      await syncDataToSheet(activeToken, sheetId, events, venues);
 
       toast({
         title: isEs ? 'Sincronización Exitosa' : 'Sync Successful',
@@ -163,7 +190,8 @@ export default function SettingsPage() {
 
   const handleManualSync = async () => {
     const isEs = localSettings.language === 'es';
-    if (!token) {
+    const activeToken = await ensureToken();
+    if (!activeToken) {
       setNeedsAuth(true);
       return;
     }
@@ -172,7 +200,7 @@ export default function SettingsPage() {
 
     setIsSyncing(true);
     try {
-      await syncDataToSheet(token, sheetId, events, venues);
+      await syncDataToSheet(activeToken, sheetId, events, venues);
       toast({
         title: isEs ? 'Sincronización Exitosa' : 'Sync Successful',
         description: isEs 
@@ -195,7 +223,8 @@ export default function SettingsPage() {
 
   const handleRestoreFromSheets = async () => {
     const isEs = localSettings.language === 'es';
-    if (!token) {
+    const activeToken = await ensureToken();
+    if (!activeToken) {
       setNeedsAuth(true);
       return;
     }
@@ -204,7 +233,7 @@ export default function SettingsPage() {
 
     setIsRestoring(true);
     try {
-      const data = await fetchDataFromSheet(token, sheetId);
+      const data = await fetchDataFromSheet(activeToken, sheetId);
       if (!data) {
         throw new Error('No data found or failed to fetch');
       }
@@ -457,12 +486,13 @@ export default function SettingsPage() {
                 </div>
                 <Select
                   value={localSettings.exportFrequency}
-                  onValueChange={(value: 'weekly' | 'monthly' | 'annually') => handleSettingChange('exportFrequency', value)}
+                  onValueChange={(value: 'daily' | 'weekly' | 'monthly' | 'annually') => handleSettingChange('exportFrequency', value)}
                 >
                   <SelectTrigger className="w-[180px]">
                     <SelectValue placeholder="Frequency" />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="daily">{t('settings.export.frequency.daily')}</SelectItem>
                     <SelectItem value="weekly">{t('settings.export.frequency.weekly')}</SelectItem>
                     <SelectItem value="monthly">{t('settings.export.frequency.monthly')}</SelectItem>
                     <SelectItem value="annually">{t('settings.export.frequency.annually')}</SelectItem>
@@ -546,200 +576,199 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {needsAuth || !user ? (
-                <div className="flex flex-col items-center justify-center p-6 border border-dashed rounded-lg space-y-4">
-                  <FileSpreadsheet className="h-12 w-12 text-muted-foreground opacity-50" />
-                  <div className="text-center space-y-1">
-                    <p className="font-medium text-sm">
-                      {localSettings.language === 'es' ? 'Requiere Cuenta de Google' : 'Google Account Required'}
-                    </p>
-                    <p className="text-xs text-muted-foreground max-w-sm">
-                      {localSettings.language === 'es' 
-                        ? 'Inicia sesión con Google para permitir que la aplicación cree y administre tu base de datos en Google Sheets.'
-                        : 'Sign in with Google to allow the application to create and manage your database on Google Sheets.'}
-                    </p>
+              {user && !needsAuth ? (
+                <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-sm flex-col sm:flex-row gap-3">
+                  <div className="flex items-center gap-3">
+                    {user.photoURL ? (
+                      <img src={user.photoURL} referrerPolicy="no-referrer" alt="Google Avatar" className="h-8 w-8 rounded-full" />
+                    ) : (
+                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center font-bold">
+                        {user.displayName ? user.displayName[0] : 'U'}
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-medium">{user.displayName || 'Google User'}</p>
+                      <p className="text-xs text-muted-foreground">{user.email}</p>
+                    </div>
                   </div>
-                  <Button variant="outline" onClick={handleLogin} disabled={isLoggingIn}>
-                    {isLoggingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Cloud className="mr-2 h-4 w-4" />}
-                    {localSettings.language === 'es' ? 'Iniciar Sesión con Google' : 'Sign in with Google'}
-                  </Button>
+                  <span className="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold bg-green-500/10 text-green-500 border-green-500/20 gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                    {localSettings.language === 'es' ? 'Conectado' : 'Connected'}
+                  </span>
                 </div>
               ) : (
-                <div className="space-y-6">
-                  <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg text-sm">
-                    <div className="flex items-center gap-3">
-                      {user.photoURL ? (
-                        <img src={user.photoURL} referrerPolicy="no-referrer" alt="Google Avatar" className="h-8 w-8 rounded-full" />
-                      ) : (
-                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center font-bold">
-                          {user.displayName ? user.displayName[0] : 'U'}
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-medium">{user.displayName || 'Google User'}</p>
-                        <p className="text-xs text-muted-foreground">{user.email}</p>
-                      </div>
-                    </div>
-                    <span className="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold bg-green-500/10 text-green-500 border-green-500/20 gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                      {localSettings.language === 'es' ? 'Conectado' : 'Connected'}
-                    </span>
+                <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg gap-4 text-sm">
+                  <div className="space-y-1 text-center sm:text-left">
+                    <p className="font-semibold text-amber-800 dark:text-amber-400">
+                      {localSettings.language === 'es' ? 'Sincronización Activa (Google Desconectado)' : 'Active Sync (Google Offline)'}
+                    </p>
+                    <p className="text-xs text-muted-foreground max-w-md">
+                      {localSettings.language === 'es' 
+                        ? 'Tu base de datos está vinculada. Inicia sesión con Google para permitir sincronización y respaldos automáticos en tiempo real.'
+                        : 'Your database remains linked. Please sign in with Google to enable real-time updates and automated backups.'}
+                    </p>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <Label htmlFor="sheets-sync">{localSettings.language === 'es' ? 'Sincronización Automática' : 'Automatic Synchronization'}</Label>
-                      <p className="text-sm text-muted-foreground">
-                        {localSettings.language === 'es' 
-                          ? 'Sincroniza automáticamente los cambios al agregar, editar o eliminar eventos.' 
-                          : 'Automatically sync changes when adding, editing, or deleting events.'}
-                      </p>
-                    </div>
-                    <Switch 
-                      id="sheets-sync"
-                      checked={!!localSettings.sheetsSyncEnabled}
-                      onCheckedChange={(checked) => handleSettingChange('sheetsSyncEnabled', checked)}
-                      disabled={!localSettings.spreadsheetId}
-                    />
-                  </div>
-
-                  <Separator />
-
-                  {localSettings.spreadsheetId ? (
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>{localSettings.language === 'es' ? 'ID del Spreadsheet de Google Sheets' : 'Google Sheets Spreadsheet ID'}</Label>
-                        <div className="flex gap-2">
-                          <Input 
-                            value={localSettings.spreadsheetId} 
-                            readOnly 
-                            className="font-mono text-xs bg-muted/30"
-                          />
-                          <Button 
-                            variant="outline" 
-                            size="icon"
-                            asChild
-                          >
-                            <a 
-                              href={`https://docs.google.com/spreadsheets/d/${localSettings.spreadsheetId}/edit`} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              title={localSettings.language === 'es' ? 'Abrir en Google Sheets' : 'Open in Google Sheets'}
-                            >
-                              <ExternalLink className="h-4 w-4 text-green-500" />
-                            </a>
-                          </Button>
-                        </div>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button 
-                          className="flex-1 bg-green-600 hover:bg-green-700 text-white" 
-                          onClick={handleManualSync} 
-                          disabled={isSyncing}
-                        >
-                          {isSyncing ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="mr-2 h-4 w-4" />
-                          )}
-                          {localSettings.language === 'es' ? 'Sincronizar Datos Ahora' : 'Sync Data Now'}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => {
-                            handleSettingChange('spreadsheetId', '');
-                            handleSettingChange('sheetsSyncEnabled', false);
-                          }}
-                        >
-                          {localSettings.language === 'es' ? 'Desvincular' : 'Unlink'}
-                        </Button>
-                      </div>
-
-                      <div className="pt-2">
-                        <Button
-                          variant="outline"
-                          className="w-full border-green-500/30 hover:bg-green-500/10 text-green-600 dark:text-green-400"
-                          onClick={handleRestoreFromSheets}
-                          disabled={isRestoring}
-                        >
-                          {isRestoring ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <Download className="mr-2 h-4 w-4" />
-                          )}
-                          {localSettings.language === 'es' 
-                            ? 'Restaurar / Importar Datos desde Google Sheets' 
-                            : 'Restore / Import Data from Google Sheets'}
-                        </Button>
-                        <p className="text-xs text-muted-foreground mt-1 text-center">
-                          {localSettings.language === 'es'
-                            ? 'Recupera tus eventos y locales guardados en Google Sheets en caso de que se hayan borrado.'
-                            : 'Recover your saved events and venues from Google Sheets in case they were cleared.'}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium">
-                          {localSettings.language === 'es' ? 'Crear un nuevo archivo de base de datos' : 'Create a new database spreadsheet'}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {localSettings.language === 'es' 
-                            ? 'Esto creará un nuevo archivo llamado "DJ Ledger - Base de Datos" en tu Google Drive y cargará toda la información de eventos y locales actual.'
-                            : 'This will create a new spreadsheet named "DJ Ledger - Base de Datos" in your Google Drive and upload all current events and venues.'}
-                        </p>
-                        <Button 
-                          onClick={handleCreateSpreadsheet} 
-                          disabled={isCreatingSheet}
-                          className="w-full bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          {isCreatingSheet ? (
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          ) : (
-                            <FileSpreadsheet className="mr-2 h-4 w-4" />
-                          )}
-                          {localSettings.language === 'es' ? 'Crear Base de Datos en Sheets' : 'Create Database in Sheets'}
-                        </Button>
-                      </div>
-
-                      <div className="relative py-2">
-                        <div className="absolute inset-0 flex items-center">
-                          <span className="w-full border-t" />
-                        </div>
-                        <div className="relative flex justify-center text-xs uppercase">
-                          <span className="bg-background px-2 text-muted-foreground">
-                            {localSettings.language === 'es' ? 'O vincula un archivo existente' : 'Or link an existing sheet'}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label htmlFor="existing-sheet-id">
-                          {localSettings.language === 'es' ? 'ID del Spreadsheet existente' : 'Existing Spreadsheet ID'}
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input 
-                            id="existing-sheet-id"
-                            placeholder="e.g. 1a2b3c4d5e6f7g8h9i0j..."
-                            value={inputSpreadsheetId}
-                            onChange={(e) => setInputSpreadsheetId(e.target.value)}
-                          />
-                          <Button 
-                            variant="secondary" 
-                            onClick={handleLinkSpreadsheet}
-                            disabled={!inputSpreadsheetId.trim()}
-                          >
-                            <LinkIcon className="mr-2 h-4 w-4" />
-                            {localSettings.language === 'es' ? 'Vincular' : 'Link'}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                  <Button variant="outline" size="sm" onClick={handleLogin} disabled={isLoggingIn} className="border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300">
+                    {isLoggingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Cloud className="mr-2 h-4 w-4 text-amber-500" />}
+                    {localSettings.language === 'es' ? 'Vincular Cuenta' : 'Link Account'}
+                  </Button>
                 </div>
               )}
+
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <Label htmlFor="sheets-sync">{localSettings.language === 'es' ? 'Sincronización Automática' : 'Automatic Synchronization'}</Label>
+                    <p className="text-sm text-muted-foreground">
+                      {localSettings.language === 'es' 
+                        ? 'Sincroniza automáticamente los cambios al agregar, editar o eliminar eventos.' 
+                        : 'Automatically sync changes when adding, editing, or deleting events.'}
+                    </p>
+                  </div>
+                  <Switch 
+                    id="sheets-sync"
+                    checked={!!localSettings.sheetsSyncEnabled}
+                    onCheckedChange={(checked) => handleSettingChange('sheetsSyncEnabled', checked)}
+                    disabled={!localSettings.spreadsheetId}
+                  />
+                </div>
+
+                <Separator />
+
+                {localSettings.spreadsheetId ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label>{localSettings.language === 'es' ? 'ID del Spreadsheet de Google Sheets' : 'Google Sheets Spreadsheet ID'}</Label>
+                      <div className="flex gap-2">
+                        <Input 
+                          value={localSettings.spreadsheetId} 
+                          readOnly 
+                          className="font-mono text-xs bg-muted/30"
+                        />
+                        <Button 
+                          variant="outline" 
+                          size="icon"
+                          asChild
+                        >
+                          <a 
+                            href={`https://docs.google.com/spreadsheets/d/${localSettings.spreadsheetId}/edit`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            title={localSettings.language === 'es' ? 'Abrir en Google Sheets' : 'Open in Google Sheets'}
+                          >
+                            <ExternalLink className="h-4 w-4 text-green-500" />
+                          </a>
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button 
+                        className="flex-1 bg-green-600 hover:bg-green-700 text-white" 
+                        onClick={handleManualSync} 
+                        disabled={isSyncing}
+                      >
+                        {isSyncing ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                        )}
+                        {localSettings.language === 'es' ? 'Sincronizar Datos Ahora' : 'Sync Data Now'}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          handleSettingChange('spreadsheetId', '');
+                          handleSettingChange('sheetsSyncEnabled', false);
+                        }}
+                      >
+                        {localSettings.language === 'es' ? 'Desvincular' : 'Unlink'}
+                      </Button>
+                    </div>
+
+                    <div className="pt-2">
+                      <Button
+                        variant="outline"
+                        className="w-full border-green-500/30 hover:bg-green-500/10 text-green-600 dark:text-green-400"
+                        onClick={handleRestoreFromSheets}
+                        disabled={isRestoring}
+                      >
+                        {isRestoring ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="mr-2 h-4 w-4" />
+                        )}
+                        {localSettings.language === 'es' 
+                          ? 'Restaurar / Importar Datos desde Google Sheets' 
+                          : 'Restore / Import Data from Google Sheets'}
+                      </Button>
+                      <p className="text-xs text-muted-foreground mt-1 text-center">
+                        {localSettings.language === 'es'
+                          ? 'Recupera tus eventos y locales guardados en Google Sheets en caso de que se hayan borrado.'
+                          : 'Recover your saved events and venues from Google Sheets in case they were cleared.'}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <p className="text-sm font-medium">
+                        {localSettings.language === 'es' ? 'Crear un nuevo archivo de base de datos' : 'Create a new database spreadsheet'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {localSettings.language === 'es' 
+                          ? 'Esto creará un nuevo archivo llamado "DJ Ledger - Base de Datos" en tu Google Drive y cargará toda la información de eventos y locales actual.'
+                          : 'This will create a new spreadsheet named "DJ Ledger - Base de Datos" in your Google Drive and upload all current events and venues.'}
+                      </p>
+                      <Button 
+                        onClick={handleCreateSpreadsheet} 
+                        disabled={isCreatingSheet}
+                        className="w-full bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        {isCreatingSheet ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <FileSpreadsheet className="mr-2 h-4 w-4" />
+                        )}
+                        {localSettings.language === 'es' ? 'Crear Base de Datos en Sheets' : 'Create Database in Sheets'}
+                      </Button>
+                    </div>
+
+                    <div className="relative py-2">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-background px-2 text-muted-foreground">
+                          {localSettings.language === 'es' ? 'O vincula un archivo existente' : 'Or link an existing sheet'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="existing-sheet-id">
+                        {localSettings.language === 'es' ? 'ID del Spreadsheet existente' : 'Existing Spreadsheet ID'}
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input 
+                          id="existing-sheet-id"
+                          placeholder="e.g. 1a2b3c4d5e6f7g8h9i0j..."
+                          value={inputSpreadsheetId}
+                          onChange={(e) => setInputSpreadsheetId(e.target.value)}
+                        />
+                        <Button 
+                          variant="secondary" 
+                          onClick={handleLinkSpreadsheet}
+                          disabled={!inputSpreadsheetId.trim()}
+                        >
+                          <LinkIcon className="mr-2 h-4 w-4" />
+                          {localSettings.language === 'es' ? 'Vincular' : 'Link'}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
             </CardContent>
           </Card>
 

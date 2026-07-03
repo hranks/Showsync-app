@@ -31,7 +31,7 @@ export interface Settings {
   username: string;
   notifications: boolean;
   reminderTime: '15' | '60' | '1440';
-  exportFrequency: 'weekly' | 'monthly' | 'annually';
+  exportFrequency: 'daily' | 'weekly' | 'monthly' | 'annually';
   exportMethod: 'email' | 'download' | null;
   cloudBackup: boolean;
   spreadsheetId?: string;
