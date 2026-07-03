@@ -5,6 +5,7 @@ import { LoginScreen } from '@/components/auth/login-screen';
 import { AppLayout } from '@/components/layout/app-layout';
 import { Toaster } from '@/components/ui/toaster';
 import { useToast } from '@/hooks/use-toast';
+import { SettingsProvider } from '@/hooks/use-settings-store';
 
 // Pages
 import DashboardPage from '@/pages/Dashboard';
@@ -75,25 +76,27 @@ export default function App() {
   const { isAuthenticated } = useAuthStore();
 
   return (
-    <BrowserRouter>
-      <SessionTimeoutManager />
-      <Routes>
-        <Route 
-          path="/login" 
-          element={!isAuthenticated ? <LoginScreen /> : <Navigate to="/" replace />} 
-        />
-        <Route
-          path="/"
-          element={isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />}
-        >
-          <Route index element={<DashboardPage />} />
-          <Route path="events" element={<EventsPage />} />
-          <Route path="earnings" element={<EarningsPage />} />
-          <Route path="reports" element={<ReportsPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-        </Route>
-      </Routes>
-      <Toaster />
-    </BrowserRouter>
+    <SettingsProvider>
+      <BrowserRouter>
+        <SessionTimeoutManager />
+        <Routes>
+          <Route 
+            path="/login" 
+            element={!isAuthenticated ? <LoginScreen /> : <Navigate to="/" replace />} 
+          />
+          <Route
+            path="/"
+            element={isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />}
+          >
+            <Route index element={<DashboardPage />} />
+            <Route path="events" element={<EventsPage />} />
+            <Route path="earnings" element={<EarningsPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
+        <Toaster />
+      </BrowserRouter>
+    </SettingsProvider>
   );
 }
