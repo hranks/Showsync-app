@@ -5,8 +5,8 @@ import { createServer as createViteServer } from "vite";
 import { format } from "date-fns";
 
 const DB_PATH = path.join(process.cwd(), 'database.json');
-type DatabaseSchema = { events: any[], venues: any[] };
-const defaultDb: DatabaseSchema = { events: [], venues: [] };
+type DatabaseSchema = { events: any[], venues: any[], userSettings?: Record<string, any> };
+const defaultDb: DatabaseSchema = { events: [], venues: [], userSettings: {} };
 
 async function getDb(): Promise<DatabaseSchema> {
   try {
@@ -127,6 +127,33 @@ async function startServer() {
       res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: 'Failed to delete venue' });
+    }
+  });
+
+  // User Settings API Routes
+  app.get("/api/user-settings", async (req, res) => {
+    try {
+      const { user } = req.query;
+      if (!user) return res.status(400).json({ error: "User is required" });
+      const db = await getDb();
+      const settings = db.userSettings?.[user as string] || null;
+      res.json({ settings });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to fetch user settings" });
+    }
+  });
+
+  app.post("/api/user-settings", async (req, res) => {
+    try {
+      const { user, settings } = req.body;
+      if (!user) return res.status(400).json({ error: "User is required" });
+      const db = await getDb();
+      if (!db.userSettings) db.userSettings = {};
+      db.userSettings[user] = settings;
+      await saveDb(db);
+      res.json({ success: true });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to save user settings" });
     }
   });
 

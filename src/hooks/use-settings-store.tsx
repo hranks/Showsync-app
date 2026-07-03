@@ -39,30 +39,68 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
 
   // Load settings when user logs in or out
   useEffect(() => {
-    try {
-      const key = getStorageKey();
-      const storedSettings = localStorage.getItem(key);
-      if (storedSettings) {
-        setSettingsState({ ...defaultSettings, ...JSON.parse(storedSettings) });
-      } else {
-        // Fallback to general settings or defaults
-        const generalSettings = localStorage.getItem('dj_settings');
-        if (generalSettings) {
-          const parsed = JSON.parse(generalSettings);
-          setSettingsState({ ...defaultSettings, ...parsed });
-          localStorage.setItem(key, JSON.stringify(parsed));
-        } else {
-          localStorage.setItem(key, JSON.stringify(defaultSettings));
-          setSettingsState(defaultSettings);
+    let active = true;
+
+    async function loadSettings() {
+      try {
+        const key = getStorageKey();
+        const storedSettings = localStorage.getItem(key);
+        let currentSettings = storedSettings ? JSON.parse(storedSettings) : null;
+
+        if (isAuthenticated && user?.usernameOrEmail) {
+          // Attempt to load from server
+          try {
+            const res = await fetch(`/api/user-settings?user=${encodeURIComponent(user.usernameOrEmail)}`);
+            if (res.ok) {
+              const data = await res.json();
+              if (data && data.settings) {
+                if (active) {
+                  const combined = { ...defaultSettings, ...data.settings };
+                  setSettingsState(combined);
+                  localStorage.setItem(key, JSON.stringify(combined));
+                  return;
+                }
+              }
+            }
+          } catch (serverError) {
+            console.error("Failed to load settings from server, falling back to localStorage", serverError);
+          }
         }
+
+        // Local storage / default fallback
+        if (currentSettings) {
+          if (active) {
+            setSettingsState({ ...defaultSettings, ...currentSettings });
+          }
+        } else {
+          const generalSettings = localStorage.getItem('dj_settings');
+          if (generalSettings) {
+            const parsed = JSON.parse(generalSettings);
+            if (active) {
+              setSettingsState({ ...defaultSettings, ...parsed });
+              localStorage.setItem(key, JSON.stringify(parsed));
+            }
+          } else {
+            if (active) {
+              setSettingsState(defaultSettings);
+              localStorage.setItem(key, JSON.stringify(defaultSettings));
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error loading settings:", error);
+        if (active) setSettingsState(defaultSettings);
+      } finally {
+        if (active) setIsInitialized(true);
       }
-    } catch (error) {
-      console.error("Error loading settings:", error);
-      setSettingsState(defaultSettings);
-    } finally {
-      setIsInitialized(true);
     }
-  }, [getStorageKey]);
+
+    loadSettings();
+
+    return () => {
+      active = false;
+    };
+  }, [getStorageKey, isAuthenticated, user]);
 
   // Instantly apply theme class to the document root
   useEffect(() => {
@@ -73,15 +111,33 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     }
   }, [settings.theme]);
 
-  const setSettings = useCallback((newSettings: Settings) => {
+  const setSettings = useCallback(async (newSettings: Settings) => {
     try {
       const key = getStorageKey();
       localStorage.setItem(key, JSON.stringify(newSettings));
+      setSettingsState(newSettings);
+
+      // If authenticated, also update on the server
+      if (isAuthenticated && user?.usernameOrEmail) {
+        try {
+          await fetch('/api/user-settings', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              user: user.usernameOrEmail,
+              settings: newSettings,
+            }),
+          });
+        } catch (serverErr) {
+          console.error("Failed to save settings to server:", serverErr);
+        }
+      }
     } catch (error) {
       console.error("Error saving settings:", error);
     }
-    setSettingsState(newSettings);
-  }, [getStorageKey]);
+  }, [getStorageKey, isAuthenticated, user]);
 
   return (
     <SettingsContext.Provider value={{ settings, setSettings, isInitialized }}>
