@@ -56,8 +56,8 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       ...event,
-      startTime: event.startTime || '',
-      endTime: event.endTime || '',
+      startTime: event.startTime || '20:00', // Default to 8:00 PM if missing
+      endTime: event.endTime || '02:00',     // Default to 2:00 AM (Next Day) if missing
       totalEarnings: event.totalEarnings || 0,
       notes: event.notes || '',
       paymentAdvanceNIO: event.paymentAdvanceNIO || 0,
@@ -67,16 +67,16 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
     },
   });
 
-  function onSubmit(values: EditEventFormValues) {
-    let totalHours = 0;
-    let overtimeHours = 0;
+  const watchedStartTime = form.watch('startTime');
+  const watchedEndTime = form.watch('endTime');
+  const watchedDate = form.watch('date');
 
-    const startTime = values.startTime || '';
-    const endTime = values.endTime || '';
-
-    if (startTime && endTime) {
-      const startDateTime = new Date(`${format(values.date, 'yyyy-MM-dd')}T${startTime}`);
-      let endDateTime = new Date(`${format(values.date, 'yyyy-MM-dd')}T${endTime}`);
+  const calculatedHours = React.useMemo(() => {
+    if (!watchedStartTime || !watchedEndTime) return 0;
+    const calcDate = watchedDate || new Date();
+    try {
+      const startDateTime = new Date(`${format(calcDate, 'yyyy-MM-dd')}T${watchedStartTime}`);
+      let endDateTime = new Date(`${format(calcDate, 'yyyy-MM-dd')}T${watchedEndTime}`);
 
       // If end time is on the next day
       if (endDateTime <= startDateTime) {
@@ -84,8 +84,19 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
       }
 
       const diffMs = endDateTime.getTime() - startDateTime.getTime();
-      totalHours = diffMs / (1000 * 60 * 60);
+      const hrs = diffMs / (1000 * 60 * 60);
+      return isNaN(hrs) ? 0 : hrs;
+    } catch (e) {
+      return 0;
     }
+  }, [watchedDate, watchedStartTime, watchedEndTime]);
+
+  function onSubmit(values: EditEventFormValues) {
+    const totalHours = calculatedHours;
+    let overtimeHours = 0;
+
+    const startTime = values.startTime || '20:00';
+    const endTime = values.endTime || '02:00';
     
     const rate = totalHours > 0 ? values.totalEarnings / totalHours : 0;
     
@@ -260,7 +271,7 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
           )}
         />
         
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
                 control={form.control}
                 name="startTime"
@@ -284,6 +295,19 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
                 )}
             />
         </div>
+
+        <FormItem>
+          <FormLabel className="text-primary font-medium">{t('reportsTable.totalHours')}</FormLabel>
+          <FormControl>
+            <Input 
+              type="text" 
+              value={calculatedHours > 0 ? `${calculatedHours.toFixed(2)} hrs` : '--'} 
+              readOnly 
+              disabled 
+              className="bg-muted font-mono font-medium text-foreground cursor-not-allowed border-dashed"
+            />
+          </FormControl>
+        </FormItem>
         
          <FormField
             control={form.control}

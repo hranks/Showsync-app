@@ -57,8 +57,8 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
     resolver: zodResolver(formSchema),
     defaultValues: {
       date: undefined,
-      startTime: '',
-      endTime: '',
+      startTime: '20:00', // Default to 8:00 PM
+      endTime: '02:00',   // Default to 2:00 AM (Next Day)
       totalEarnings: 0,
       eventType: 'Club',
       venueName: '',
@@ -69,6 +69,30 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
       consumptionsUSD: 0,
     },
   });
+
+  const watchedStartTime = form.watch('startTime');
+  const watchedEndTime = form.watch('endTime');
+  const watchedDate = form.watch('date');
+
+  const calculatedHours = React.useMemo(() => {
+    if (!watchedStartTime || !watchedEndTime) return 0;
+    const calcDate = watchedDate || new Date();
+    try {
+      const startDateTime = new Date(`${format(calcDate, 'yyyy-MM-dd')}T${watchedStartTime}`);
+      let endDateTime = new Date(`${format(calcDate, 'yyyy-MM-dd')}T${watchedEndTime}`);
+
+      // If end time is on the next day
+      if (endDateTime <= startDateTime) {
+        endDateTime.setDate(endDateTime.getDate() + 1);
+      }
+
+      const diffMs = endDateTime.getTime() - startDateTime.getTime();
+      const hrs = diffMs / (1000 * 60 * 60);
+      return isNaN(hrs) ? 0 : hrs;
+    } catch (e) {
+      return 0;
+    }
+  }, [watchedDate, watchedStartTime, watchedEndTime]);
   
   const [selectedVenue, setSelectedVenue] = React.useState<Venue | null>(null);
 
@@ -88,21 +112,8 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
   }
 
   function onSubmit(values: AddEventFormValues) {
-    let totalHours = 0;
+    const totalHours = calculatedHours;
     let overtimeHours = 0;
-    
-    if (values.startTime && values.endTime && values.date) {
-      const startDateTime = new Date(`${format(values.date, 'yyyy-MM-dd')}T${values.startTime}`);
-      let endDateTime = new Date(`${format(values.date, 'yyyy-MM-dd')}T${values.endTime}`);
-
-      // If end time is on the next day
-      if (endDateTime <= startDateTime) {
-        endDateTime.setDate(endDateTime.getDate() + 1);
-      }
-
-      const diffMs = endDateTime.getTime() - startDateTime.getTime();
-      totalHours = diffMs / (1000 * 60 * 60);
-    }
 
     const rate = totalHours > 0 ? values.totalEarnings / totalHours : 0;
     
@@ -126,7 +137,19 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
       title: t('addEventForm.toast.title'),
       description: t('addEventForm.toast.description', { venueName: values.venueName, date: values.date ? format(values.date, 'PPP') : '' }),
     })
-    form.reset();
+    form.reset({
+      date: undefined,
+      startTime: '20:00',
+      endTime: '02:00',
+      totalEarnings: 0,
+      eventType: 'Club',
+      venueName: '',
+      notes: '',
+      paymentAdvanceNIO: 0,
+      paymentAdvanceUSD: 0,
+      consumptionsNIO: 0,
+      consumptionsUSD: 0,
+    });
   }
 
   const TimePicker = ({ fieldName }: { fieldName: 'startTime' | 'endTime' }) => {
@@ -289,7 +312,7 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
           )}
         />
         
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
             name="startTime"
@@ -313,6 +336,19 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
             )}
             />
         </div>
+
+        <FormItem>
+          <FormLabel className="text-primary font-medium">{t('reportsTable.totalHours')}</FormLabel>
+          <FormControl>
+            <Input 
+              type="text" 
+              value={calculatedHours > 0 ? `${calculatedHours.toFixed(2)} hrs` : '--'} 
+              readOnly 
+              disabled 
+              className="bg-muted font-mono font-medium text-foreground cursor-not-allowed border-dashed"
+            />
+          </FormControl>
+        </FormItem>
 
         <FormField
             control={form.control}
