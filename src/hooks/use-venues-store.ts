@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Venue } from '@/types';
-import { getAccessToken } from '@/lib/auth';
+import { getAccessToken, logout } from '@/lib/auth';
 import { syncDataToSheet } from '@/lib/sheets';
 
 export function useVenues() {
@@ -27,6 +27,9 @@ export function useVenues() {
       }
     } catch (err) {
       console.error('Background sync failed:', err);
+      if (err instanceof Error && err.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
+        logout();
+      }
     }
   }, []);
 

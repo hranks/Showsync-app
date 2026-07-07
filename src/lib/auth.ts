@@ -14,17 +14,30 @@ provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 
 let isSigningIn = false;
 let cachedAccessToken: string | null = typeof window !== 'undefined' ? localStorage.getItem('google_access_token') : null;
+let cachedTokenExpiry: number = typeof window !== 'undefined' ? Number(localStorage.getItem('google_access_token_expiry') || '0') : 0;
+
+const checkAndClearExpiredToken = () => {
+  if (typeof window !== 'undefined') {
+    cachedAccessToken = localStorage.getItem('google_access_token');
+    cachedTokenExpiry = Number(localStorage.getItem('google_access_token_expiry') || '0');
+    
+    // Google tokens usually last 1 hour. If it's expired (or near expiration), clear it.
+    if (cachedAccessToken && (Date.now() > cachedTokenExpiry || cachedTokenExpiry === 0)) {
+      cachedAccessToken = null;
+      localStorage.removeItem('google_access_token');
+      localStorage.removeItem('google_access_token_expiry');
+    }
+  }
+};
 
 export const initAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
-  // Try to restore from localStorage if cachedAccessToken is not set
-  if (!cachedAccessToken && typeof window !== 'undefined') {
-    cachedAccessToken = localStorage.getItem('google_access_token');
-  }
+  checkAndClearExpiredToken();
 
   return onAuthStateChanged(auth, async (user: User | null) => {
+    checkAndClearExpiredToken();
     if (user) {
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
@@ -32,6 +45,7 @@ export const initAuth = (
         cachedAccessToken = null;
         if (typeof window !== 'undefined') {
           localStorage.removeItem('google_access_token');
+          localStorage.removeItem('google_access_token_expiry');
         }
         if (onAuthFailure) onAuthFailure();
       }
@@ -39,6 +53,7 @@ export const initAuth = (
       cachedAccessToken = null;
       if (typeof window !== 'undefined') {
         localStorage.removeItem('google_access_token');
+        localStorage.removeItem('google_access_token_expiry');
       }
       if (onAuthFailure) onAuthFailure();
     }
@@ -55,8 +70,11 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    // Set expiry to 3540 seconds (59 minutes) from now to be safe
+    cachedTokenExpiry = Date.now() + 3540 * 1000;
     if (typeof window !== 'undefined') {
       localStorage.setItem('google_access_token', cachedAccessToken);
+      localStorage.setItem('google_access_token_expiry', cachedTokenExpiry.toString());
     }
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
@@ -68,9 +86,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getAccessToken = async (): Promise<string | null> => {
-  if (!cachedAccessToken && typeof window !== 'undefined') {
-    cachedAccessToken = localStorage.getItem('google_access_token');
-  }
+  checkAndClearExpiredToken();
   return cachedAccessToken;
 };
 
@@ -79,5 +95,6 @@ export const logout = async () => {
   cachedAccessToken = null;
   if (typeof window !== 'undefined') {
     localStorage.removeItem('google_access_token');
+    localStorage.removeItem('google_access_token_expiry');
   }
 };

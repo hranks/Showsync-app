@@ -140,6 +140,34 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSheetsError = (error: any, isEs: boolean) => {
+    if (error instanceof Error && error.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
+      logout();
+      setToken(null);
+      setUser(null);
+      setNeedsAuth(true);
+      toast({
+        title: isEs ? 'Sesión de Google Expirada' : 'Google Session Expired',
+        description: isEs 
+          ? 'Tu sesión de Google ha expirado o el token es inválido. Por favor, vuelve a iniciar sesión con Google.' 
+          : 'Your Google session has expired or the token is invalid. Please sign in with Google again.',
+        variant: 'destructive',
+      });
+      return true;
+    }
+    if (error instanceof Error && error.message === 'API_NOT_ENABLED') {
+      toast({
+        title: isEs ? 'API de Google Sheets Desactivada' : 'Google Sheets API Disabled',
+        description: isEs 
+          ? 'La API de Google Sheets no está habilitada en tu proyecto de Google Cloud. Por favor, habilítala en la consola de Google Cloud.' 
+          : 'The Google Sheets API is not enabled in your Google Cloud project. Please enable it in the Google Cloud Console.',
+        variant: 'destructive',
+      });
+      return true;
+    }
+    return false;
+  };
+
   const handleCreateSpreadsheet = async () => {
     const isEs = localSettings.language === 'es';
     const activeToken = await ensureToken();
@@ -176,6 +204,7 @@ export default function SettingsPage() {
       });
     } catch (error) {
       console.error('Error creating spreadsheet:', error);
+      if (handleSheetsError(error, isEs)) return;
       toast({
         title: isEs ? 'Error al crear' : 'Failed to create',
         description: isEs 
@@ -209,6 +238,7 @@ export default function SettingsPage() {
       });
     } catch (error) {
       console.error('Error syncing to spreadsheet:', error);
+      if (handleSheetsError(error, isEs)) return;
       toast({
         title: isEs ? 'Error de Sincronización' : 'Sync Failed',
         description: isEs 
@@ -262,6 +292,7 @@ export default function SettingsPage() {
       }
     } catch (error) {
       console.error('Error restoring from spreadsheet:', error);
+      if (handleSheetsError(error, isEs)) return;
       toast({
         title: isEs ? 'Error de Restauración' : 'Restore Failed',
         description: isEs 

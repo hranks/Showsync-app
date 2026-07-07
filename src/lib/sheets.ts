@@ -87,6 +87,18 @@ export async function createSpreadsheet(accessToken: string): Promise<string> {
     }),
   });
 
+  if (response.status === 401) {
+    throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+  }
+
+  if (response.status === 403) {
+    const errorDetails = await response.text();
+    if (errorDetails.includes('SERVICE_DISABLED') || errorDetails.includes('disabled')) {
+      throw new Error('API_NOT_ENABLED');
+    }
+    throw new Error(`Forbidden: ${errorDetails}`);
+  }
+
   if (!response.ok) {
     const errorDetails = await response.text();
     throw new Error(`Failed to create spreadsheet: ${errorDetails}`);
@@ -107,15 +119,21 @@ export async function syncDataToSheet(
   const venueData = formatVenuesToRows(venues);
 
   // 1. Clear existing values to prevent stale data
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Eventos!A1:Z10000:clear`, {
+  const clearEventsRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Eventos!A1:Z10000:clear`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
+  if (clearEventsRes.status === 401) {
+    throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+  }
 
-  await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Locales!A1:Z1000:clear`, {
+  const clearVenuesRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Locales!A1:Z1000:clear`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
+  if (clearVenuesRes.status === 401) {
+    throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+  }
 
   // 2. Write new event values
   const writeEventsRes = await fetch(
@@ -133,6 +151,16 @@ export async function syncDataToSheet(
       }),
     }
   );
+
+  if (writeEventsRes.status === 401) {
+    throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+  }
+  if (writeEventsRes.status === 403) {
+    const errorDetails = await writeEventsRes.text();
+    if (errorDetails.includes('SERVICE_DISABLED') || errorDetails.includes('disabled')) {
+      throw new Error('API_NOT_ENABLED');
+    }
+  }
 
   if (!writeEventsRes.ok) {
     throw new Error('Failed to write events data to Google Sheets');
@@ -155,6 +183,16 @@ export async function syncDataToSheet(
     }
   );
 
+  if (writeVenuesRes.status === 401) {
+    throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+  }
+  if (writeVenuesRes.status === 403) {
+    const errorDetails = await writeVenuesRes.text();
+    if (errorDetails.includes('SERVICE_DISABLED') || errorDetails.includes('disabled')) {
+      throw new Error('API_NOT_ENABLED');
+    }
+  }
+
   if (!writeVenuesRes.ok) {
     throw new Error('Failed to write venues data to Google Sheets');
   }
@@ -173,6 +211,15 @@ export async function fetchDataFromSheet(
         headers: { 'Authorization': `Bearer ${accessToken}` }
       }
     );
+    if (eventsRes.status === 401) {
+      throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+    }
+    if (eventsRes.status === 403) {
+      const errorDetails = await eventsRes.text();
+      if (errorDetails.includes('SERVICE_DISABLED') || errorDetails.includes('disabled')) {
+        throw new Error('API_NOT_ENABLED');
+      }
+    }
     let events: Event[] = [];
     if (eventsRes.ok) {
       const data = await eventsRes.json();

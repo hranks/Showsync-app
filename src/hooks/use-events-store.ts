@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Event } from '@/types';
-import { getAccessToken } from '@/lib/auth';
+import { getAccessToken, logout } from '@/lib/auth';
 import { syncDataToSheet } from '@/lib/sheets';
 
 export function useEvents() {
@@ -23,6 +23,9 @@ export function useEvents() {
       }
     } catch (err) {
       console.error('Background sync failed:', err);
+      if (err instanceof Error && err.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
+        logout();
+      }
     }
   }, []);
 
