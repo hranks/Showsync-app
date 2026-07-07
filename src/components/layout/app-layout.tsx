@@ -63,7 +63,10 @@ export function AppLayout() {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                events: data.events.map(e => ({ ...e, date: e.date.toISOString() })),
+                events: data.events.map(e => ({
+                  ...e,
+                  date: `${e.date.getFullYear()}-${String(e.date.getMonth() + 1).padStart(2, '0')}-${String(e.date.getDate()).padStart(2, '0')}`
+                })),
                 venues: data.venues
               })
             });

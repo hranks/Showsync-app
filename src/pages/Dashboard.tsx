@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 import { NextEventCard } from '@/components/dashboard/next-event-card';
 import { PerformanceStats } from '@/components/dashboard/performance-stats';
@@ -9,13 +9,37 @@ import { EventBreakdownChart } from '@/components/dashboard/event-breakdown-char
 import { useEvents } from '@/hooks/use-events-store';
 import { AddEventDialog } from '@/components/events/add-event-dialog';
 import { Button } from '@/components/ui/button';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, RefreshCw, Loader2 } from 'lucide-react';
 import { useTranslation } from '@/hooks/use-translation';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from '@/hooks/use-toast';
+import { useSettingsStore } from '@/hooks/use-settings-store';
 
 export default function DashboardPage() {
-  const { events, addEvent, isInitialized } = useEvents();
+  const { events, addEvent, isInitialized, pullFromSheets } = useEvents();
   const { t } = useTranslation();
+  const { toast } = useToast();
+  const { settings } = useSettingsStore();
+  const [isPulling, setIsPulling] = useState(false);
+
+  const handlePullFromSheets = async () => {
+    setIsPulling(true);
+    const success = await pullFromSheets();
+    setIsPulling(false);
+    
+    if (success) {
+      toast({
+        title: settings.language === 'es' ? 'Datos Actualizados' : 'Data Updated',
+        description: settings.language === 'es' ? 'Se han actualizado los eventos desde Google Sheets.' : 'Events have been updated from Google Sheets.'
+      });
+    } else {
+      toast({
+        title: settings.language === 'es' ? 'Error al actualizar' : 'Failed to update',
+        description: settings.language === 'es' ? 'No se pudo sincronizar con Google Sheets.' : 'Could not sync with Google Sheets.',
+        variant: 'destructive'
+      });
+    }
+  };
   
   if (!isInitialized) {
     return (
@@ -51,6 +75,12 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between space-y-2">
           <h2 className="font-display text-4xl font-bold tracking-tight bg-gradient-to-r from-primary via-purple-400 to-accent bg-clip-text text-transparent">{t('dashboard.title')}</h2>
           <div className="flex items-center space-x-2">
+             {settings.sheetsSyncEnabled && settings.spreadsheetId && (
+               <Button variant="outline" onClick={handlePullFromSheets} disabled={isPulling}>
+                 {isPulling ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                 {settings.language === 'es' ? 'Sincronizar' : 'Sync'}
+               </Button>
+             )}
             <AddEventDialog onEventAdd={addEvent}>
               <Button>
                 <PlusCircle className="mr-2 h-4 w-4" /> {t('dashboard.addEvent')}

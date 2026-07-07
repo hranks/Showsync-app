@@ -64,15 +64,37 @@ export function useEvents() {
   }, [toast]);
 
 
+  const toLocalDateString = (date: Date) => {
+    const d = new Date(date);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
   const fetchEvents = useCallback(async () => {
     try {
       const res = await fetch('/api/events');
       if (res.ok) {
         const data = await res.json();
-        const eventsData = data.map((e: any) => ({
-          ...e,
-          date: new Date(e.date)
-        })).sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
+        const eventsData = data.map((e: any) => {
+          let parsedDate: Date;
+          if (typeof e.date === 'string') {
+            const datePart = e.date.split('T')[0];
+            const parts = datePart.split('-');
+            if (parts.length === 3) {
+              const y = parseInt(parts[0], 10);
+              const m = parseInt(parts[1], 10);
+              const d = parseInt(parts[2], 10);
+              parsedDate = new Date(y, m - 1, d);
+            } else {
+              parsedDate = new Date(e.date);
+            }
+          } else {
+            parsedDate = new Date(e.date);
+          }
+          return {
+            ...e,
+            date: parsedDate
+          };
+        }).sort((a: any, b: any) => b.date.getTime() - a.date.getTime());
         setEvents(eventsData);
       }
     } catch (error) {
@@ -81,6 +103,43 @@ export function useEvents() {
       setIsInitialized(true);
     }
   }, []);
+
+  const pullFromSheets = useCallback(async () => {
+    const token = await getAccessToken();
+    const settingsStr = localStorage.getItem('dj_settings');
+    if (!token || !settingsStr) return false;
+    
+    try {
+      const settings = JSON.parse(settingsStr);
+      if (!settings.spreadsheetId) return false;
+
+      // Only import `fetchDataFromSheet` here to avoid circular dependencies if any
+      const { fetchDataFromSheet } = await import('@/lib/sheets');
+      const data = await fetchDataFromSheet(token, settings.spreadsheetId);
+      
+      if (data) {
+        const response = await fetch('/api/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            events: data.events.map(e => ({ ...e, date: toLocalDateString(e.date) })),
+            venues: data.venues
+          })
+        });
+
+        if (response.ok) {
+           await fetchEvents();
+           return true;
+        }
+      }
+    } catch (error) {
+      console.error('Error pulling from sheets:', error);
+      if (error instanceof Error && error.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
+        logout();
+      }
+    }
+    return false;
+  }, [fetchEvents]);
 
   useEffect(() => {
     fetchEvents();
@@ -92,7 +151,7 @@ export function useEvents() {
       const res = await fetch('/api/events', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...newEvent, date: newEvent.date.toISOString() })
+        body: JSON.stringify({ ...newEvent, date: toLocalDateString(newEvent.date) })
       });
       if (res.ok) {
         const newEventsList = [newEvent, ...events].sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -109,7 +168,7 @@ export function useEvents() {
       const res = await fetch('/api/events', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...updatedEvent, date: updatedEvent.date.toISOString() })
+        body: JSON.stringify({ ...updatedEvent, date: toLocalDateString(updatedEvent.date) })
       });
       if (res.ok) {
         const newEventsList = events.map(e => e.id === updatedEvent.id ? updatedEvent : e).sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -136,5 +195,5 @@ export function useEvents() {
     }
   }, [events, triggerSync]);
 
-  return { events, addEvent, updateEvent, deleteEvent, isInitialized };
+  return { events, addEvent, updateEvent, deleteEvent, isInitialized, pullFromSheets };
 }

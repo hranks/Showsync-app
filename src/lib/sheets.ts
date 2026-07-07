@@ -20,9 +20,15 @@ export function formatEventsToRows(events: Event[]): any[][] {
     'Notas'
   ];
 
-  const rows = events.map(e => [
+  const rows = events.map(e => {
+    let dateStr = '';
+    if (e.date) {
+      const d = new Date(e.date);
+      dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return [
     e.id,
-    e.date ? new Date(e.date).toLocaleDateString() : '',
+    dateStr,
     e.startTime || '',
     e.endTime || '',
     e.venueName || '',
@@ -36,7 +42,8 @@ export function formatEventsToRows(events: Event[]): any[][] {
     e.consumptionsNIO || 0,
     e.consumptionsUSD || 0,
     e.notes || ''
-  ]);
+  ];
+  });
 
   return [headers, ...rows];
 }
@@ -227,15 +234,32 @@ export async function fetchDataFromSheet(
       events = rows.map((row: any[]) => {
         let parsedDate = new Date();
         if (row[1]) {
-          const parts = row[1].split('/');
-          if (parts.length === 3) {
-            const p1 = parseInt(parts[0], 10);
-            const p2 = parseInt(parts[1], 10);
-            const y = parseInt(parts[2], 10);
-            if (p1 > 12) {
-              parsedDate = new Date(y, p2 - 1, p1);
+          if (row[1].includes('-')) {
+            const parts = row[1].split('-');
+            if (parts.length === 3) {
+              const y = parseInt(parts[0], 10);
+              const m = parseInt(parts[1], 10);
+              const d = parseInt(parts[2], 10);
+              parsedDate = new Date(y, m - 1, d);
             } else {
-              parsedDate = new Date(y, p1 - 1, p2);
+              parsedDate = new Date(row[1]);
+            }
+          } else if (row[1].includes('/')) {
+            const parts = row[1].split('/');
+            if (parts.length === 3) {
+              const p1 = parseInt(parts[0], 10);
+              const p2 = parseInt(parts[1], 10);
+              const y = parseInt(parts[2], 10);
+              // Prefer DD/MM/YYYY
+              if (p2 > 12) {
+                 // It must be MM/DD/YYYY if the second part is > 12
+                 parsedDate = new Date(y, p1 - 1, p2);
+              } else {
+                 // Assume DD/MM/YYYY
+                 parsedDate = new Date(y, p2 - 1, p1);
+              }
+            } else {
+              parsedDate = new Date(row[1]);
             }
           } else {
             parsedDate = new Date(row[1]);

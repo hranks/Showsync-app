@@ -24,10 +24,27 @@ export function useVenues() {
         const eventsRes = await fetch('/api/events');
         if (eventsRes.ok) {
           const eventsData = await eventsRes.json();
-          const events = eventsData.map((e: any) => ({
-            ...e,
-            date: new Date(e.date)
-          }));
+          const events = eventsData.map((e: any) => {
+            let parsedDate: Date;
+            if (typeof e.date === 'string') {
+              const datePart = e.date.split('T')[0];
+              const parts = datePart.split('-');
+              if (parts.length === 3) {
+                const y = parseInt(parts[0], 10);
+                const m = parseInt(parts[1], 10);
+                const d = parseInt(parts[2], 10);
+                parsedDate = new Date(y, m - 1, d);
+              } else {
+                parsedDate = new Date(e.date);
+              }
+            } else {
+              parsedDate = new Date(e.date);
+            }
+            return {
+              ...e,
+              date: parsedDate
+            };
+          });
           await syncDataToSheet(token, settings.spreadsheetId, events, updatedVenues);
           console.log('Background sync to Google Sheets completed successfully.');
           syncedToSheets = true;
