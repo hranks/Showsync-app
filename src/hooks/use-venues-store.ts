@@ -2,10 +2,14 @@ import { useState, useEffect, useCallback } from 'react';
 import type { Venue } from '@/types';
 import { getAccessToken, logout } from '@/lib/auth';
 import { syncDataToSheet } from '@/lib/sheets';
+import { useToast } from '@/hooks/use-toast';
+import { useTranslation } from '@/hooks/use-translation';
 
 export function useVenues() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const { toast } = useToast();
+  const { t } = useTranslation();
 
   const triggerSync = useCallback(async (updatedVenues: Venue[]) => {
     const token = await getAccessToken();
@@ -23,6 +27,11 @@ export function useVenues() {
           }));
           await syncDataToSheet(token, settings.spreadsheetId, events, updatedVenues);
           console.log('Background sync to Google Sheets completed successfully.');
+          
+          toast({
+            title: settings.language === 'es' ? 'Sincronización Exitosa' : 'Sync Successful',
+            description: settings.language === 'es' ? 'Los datos se han sincronizado con Google Sheets automáticamente.' : 'Data has been synced to Google Sheets automatically.',
+          });
         }
       }
     } catch (err) {
@@ -30,8 +39,14 @@ export function useVenues() {
       if (err instanceof Error && err.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
         logout();
       }
+      const settings = JSON.parse(settingsStr || '{}');
+      toast({
+        title: settings.language === 'es' ? 'Error de Sincronización' : 'Sync Error',
+        description: settings.language === 'es' ? 'No se pudo sincronizar con Google Sheets.' : 'Could not sync with Google Sheets.',
+        variant: 'destructive',
+      });
     }
-  }, []);
+  }, [toast]);
 
   const fetchVenues = useCallback(async () => {
     try {
