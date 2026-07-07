@@ -22,7 +22,7 @@ import { useTranslation } from '@/hooks/use-translation';
 export default function ReportsPage() {
   const { events } = useEvents();
   const [filteredEvents, setFilteredEvents] = React.useState<Event[]>([]);
-  const [reportType, setReportType] = React.useState<'weekly' | 'monthly' | 'custom' | 'gig' | null>(null);
+  const [reportType, setReportType] = React.useState<'all' | 'weekly' | 'monthly' | 'custom' | 'gig' | null>('all');
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
   const [selectedVenueName, setSelectedVenueName] = React.useState<string | undefined>();
   const { t } = useTranslation();
@@ -33,7 +33,7 @@ export default function ReportsPage() {
   }, [events]);
 
   const filterEvents = React.useCallback((
-    type: 'weekly' | 'monthly' | 'custom' | 'gig' | null,
+    type: 'all' | 'weekly' | 'monthly' | 'custom' | 'gig' | null,
     range?: DateRange,
     venueName?: string
   ) => {
@@ -54,6 +54,8 @@ export default function ReportsPage() {
       const start = range.from;
       const end = range.to;
       filtered = events.filter(e => e.date >= start && e.date <= end);
+    } else if (type === 'all') {
+      // Do nothing, show all events
     }
 
     // Filter by venue if selected
@@ -64,6 +66,13 @@ export default function ReportsPage() {
     setFilteredEvents(filtered);
     setReportType(type);
   }, [events]);
+
+  React.useEffect(() => {
+    // Initialize or update with 'all' if no specific report type is set
+    if (reportType === 'all' || reportType === null) {
+        filterEvents('all', dateRange, selectedVenueName);
+    }
+  }, [events, filterEvents, reportType, dateRange, selectedVenueName]);
   
   const handleWeeklyReport = () => {
     setDateRange(undefined);
@@ -90,6 +99,7 @@ export default function ReportsPage() {
 
 
   const getReportTitle = () => {
+    if (reportType === 'all') return t('reports.allTitle') || 'Todos los Eventos';
     if (reportType === 'weekly') return t('reports.weeklyTitle');
     if (reportType === 'monthly') return t('reports.monthlyTitle');
     if (reportType === 'custom' && dateRange?.from && dateRange?.to) {

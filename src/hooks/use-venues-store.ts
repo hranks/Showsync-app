@@ -17,6 +17,9 @@ export function useVenues() {
     if (!token || !settingsStr) return;
     try {
       const settings = JSON.parse(settingsStr);
+      let syncedToSheets = false;
+      let syncedToDrive = false;
+
       if (settings.sheetsSyncEnabled && settings.spreadsheetId) {
         const eventsRes = await fetch('/api/events');
         if (eventsRes.ok) {
@@ -27,12 +30,27 @@ export function useVenues() {
           }));
           await syncDataToSheet(token, settings.spreadsheetId, events, updatedVenues);
           console.log('Background sync to Google Sheets completed successfully.');
-          
-          toast({
-            title: settings.language === 'es' ? 'Sincronización Exitosa' : 'Sync Successful',
-            description: settings.language === 'es' ? 'Los datos se han sincronizado con Google Sheets automáticamente.' : 'Data has been synced to Google Sheets automatically.',
-          });
+          syncedToSheets = true;
         }
+      }
+
+      // Automatically backup to Google Drive as well
+      const driveRes = await fetch('/api/backup/drive', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (driveRes.ok) {
+        console.log('Background backup to Google Drive completed successfully.');
+        syncedToDrive = true;
+      }
+
+      if (syncedToSheets || syncedToDrive) {
+        toast({
+          title: settings.language === 'es' ? 'Sincronización Exitosa' : 'Sync Successful',
+          description: settings.language === 'es' ? 'Los datos se han sincronizado y respaldado automáticamente.' : 'Data has been synced and backed up automatically.',
+        });
       }
     } catch (err) {
       console.error('Background sync failed:', err);
@@ -42,7 +60,7 @@ export function useVenues() {
       const settings = JSON.parse(settingsStr || '{}');
       toast({
         title: settings.language === 'es' ? 'Error de Sincronización' : 'Sync Error',
-        description: settings.language === 'es' ? 'No se pudo sincronizar con Google Sheets.' : 'Could not sync with Google Sheets.',
+        description: settings.language === 'es' ? 'No se pudo sincronizar automáticamente.' : 'Could not sync automatically.',
         variant: 'destructive',
       });
     }

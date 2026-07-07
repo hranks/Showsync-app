@@ -57,6 +57,7 @@ export const es = {
     // Reports Page
     reports: {
         title: 'Reportes',
+        allTitle: 'Todos los Eventos',
         weeklyTitle: 'Reporte Semanal',
         monthlyTitle: 'Reporte Mensual',
         customTitle: 'Reporte desde {startDate} hasta {endDate}',
