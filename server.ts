@@ -27,7 +27,7 @@ async function saveDb(data: DatabaseSchema): Promise<void> {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = 3000;
 
   app.use(express.json());
 
@@ -252,7 +252,7 @@ async function startServer() {
         }
       }
     }));
-    app.get('*', (req, res) => {
+    app.get('*all', (req, res) => {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
       res.sendFile(path.join(distPath, 'index.html'));
     });
