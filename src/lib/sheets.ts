@@ -115,6 +115,68 @@ export async function createSpreadsheet(accessToken: string): Promise<string> {
   return data.spreadsheetId;
 }
 
+// Ensure "Eventos" and "Locales" sheets exist in the spreadsheet, creating them if missing
+export async function ensureRequiredSheets(accessToken: string, spreadsheetId: string): Promise<void> {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}?fields=sheets.properties.title`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+
+  if (res.status === 401) {
+    throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+  }
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Failed to fetch spreadsheet metadata: ${errText}`);
+  }
+
+  const metadata = await res.json();
+  const sheets = metadata.sheets || [];
+  const existingTitles = sheets.map((s: any) => s.properties?.title).filter(Boolean);
+
+  const requests: any[] = [];
+  if (!existingTitles.includes('Eventos')) {
+    requests.push({
+      addSheet: {
+        properties: {
+          title: 'Eventos',
+          gridProperties: { frozenRowCount: 1 }
+        }
+      }
+    });
+  }
+  if (!existingTitles.includes('Locales')) {
+    requests.push({
+      addSheet: {
+        properties: {
+          title: 'Locales',
+          gridProperties: { frozenRowCount: 1 }
+        }
+      }
+    });
+  }
+
+  if (requests.length > 0) {
+    const updateRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ requests })
+    });
+    
+    if (updateRes.status === 401) {
+      throw new Error('UNAUTHORIZED_OR_EXPIRED_TOKEN');
+    }
+
+    if (!updateRes.ok) {
+      const errText = await updateRes.text();
+      throw new Error(`Failed to automatically create missing sheets: ${errText}`);
+    }
+  }
+}
+
 // Clear and update Google Sheets with current events and venues
 export async function syncDataToSheet(
   accessToken: string,
@@ -122,6 +184,8 @@ export async function syncDataToSheet(
   events: Event[],
   venues: Venue[]
 ): Promise<void> {
+  await ensureRequiredSheets(accessToken, spreadsheetId);
+
   const eventData = formatEventsToRows(events);
   const venueData = formatVenuesToRows(venues);
 
@@ -211,6 +275,8 @@ export async function fetchDataFromSheet(
   spreadsheetId: string
 ): Promise<{ events: Event[]; venues: Venue[] } | null> {
   try {
+    await ensureRequiredSheets(accessToken, spreadsheetId);
+
     // 1. Fetch Eventos
     const eventsRes = await fetch(
       `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Eventos!A2:O10000`,

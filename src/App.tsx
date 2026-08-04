@@ -73,7 +73,18 @@ function SessionTimeoutManager() {
 }
 
 export default function App() {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isInitialized } = useAuthStore();
+
+  if (!isInitialized) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-background text-foreground">
+        <div className="flex flex-col items-center gap-3">
+          <span className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <p className="text-sm font-medium text-muted-foreground">Cargando aplicación...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <SettingsProvider>

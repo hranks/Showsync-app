@@ -252,7 +252,7 @@ async function startServer() {
         }
       }
     }));
-    app.get('*all', (req, res) => {
+    app.get('*', (req, res) => {
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
       res.sendFile(path.join(distPath, 'index.html'));
     });
