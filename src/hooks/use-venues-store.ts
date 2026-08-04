@@ -4,19 +4,30 @@ import { getAccessToken, logout } from '@/lib/auth';
 import { syncDataToSheet } from '@/lib/sheets';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
+import { useSettingsStore } from '@/hooks/use-settings-store';
 
 export function useVenues() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const { toast } = useToast();
   const { t } = useTranslation();
+  const { settings } = useSettingsStore();
 
   const triggerSync = useCallback(async (updatedVenues: Venue[]) => {
     const token = await getAccessToken();
-    const settingsStr = localStorage.getItem('dj_settings');
-    if (!token || !settingsStr) return;
+    if (!token) {
+      if (settings.sheetsSyncEnabled && settings.spreadsheetId) {
+        toast({
+          title: settings.language === 'es' ? 'Sincronización en Pausa' : 'Sync Paused',
+          description: settings.language === 'es' 
+            ? 'Por favor, reconecta tu cuenta de Google en la sección de Configuración para sincronizar los cambios.' 
+            : 'Please reconnect your Google account in Settings to sync changes.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
     try {
-      const settings = JSON.parse(settingsStr);
       let syncedToSheets = false;
       let syncedToDrive = false;
 
@@ -74,14 +85,13 @@ export function useVenues() {
       if (err instanceof Error && err.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
         logout();
       }
-      const settings = JSON.parse(settingsStr || '{}');
       toast({
         title: settings.language === 'es' ? 'Error de Sincronización' : 'Sync Error',
         description: settings.language === 'es' ? 'No se pudo sincronizar automáticamente.' : 'Could not sync automatically.',
         variant: 'destructive',
       });
     }
-  }, [toast]);
+  }, [settings, toast]);
 
   const fetchVenues = useCallback(async () => {
     try {

@@ -308,23 +308,51 @@ export default function SettingsPage() {
     }
   };
 
-  const handleLinkSpreadsheet = () => {
+  const handleLinkSpreadsheet = async () => {
     const isEs = localSettings.language === 'es';
-    if (!inputSpreadsheetId.trim()) return;
+    const sheetId = inputSpreadsheetId.trim();
+    if (!sheetId) return;
+
     const updated = {
       ...localSettings,
-      spreadsheetId: inputSpreadsheetId.trim(),
+      spreadsheetId: sheetId,
       sheetsSyncEnabled: true,
     };
     setLocalSettings(updated);
     setSettings(updated);
     
-    toast({
-      title: isEs ? 'Enlace Exitoso' : 'Linked Successfully',
-      description: isEs 
-        ? 'Se vinculó el ID de Google Sheets. Ahora puedes sincronizar tus datos.' 
-        : 'Google Sheets ID linked. You can now sync your data.',
-    });
+    // Attempt automatic sync of current local data to preserve the original database "desde el inicio"
+    const activeToken = await getAccessToken();
+    if (activeToken) {
+      setIsSyncing(true);
+      try {
+        await syncDataToSheet(activeToken, sheetId, events, venues);
+        toast({
+          title: isEs ? 'Vinculación y Sincronización Exitosa' : 'Linked and Synced Successfully',
+          description: isEs 
+            ? 'Se vinculó el ID de Google Sheets y se sincronizaron tus datos actuales.' 
+            : 'Google Sheets ID linked and current data synchronized successfully.',
+        });
+      } catch (error) {
+        console.error('Error syncing after manual link:', error);
+        toast({
+          title: isEs ? 'Enlace Exitoso' : 'Linked Successfully',
+          description: isEs 
+            ? 'Se vinculó el ID de Google Sheets, pero la sincronización inicial falló.' 
+            : 'Google Sheets ID linked, but initial synchronization failed.',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsSyncing(false);
+      }
+    } else {
+      toast({
+        title: isEs ? 'Enlace Exitoso' : 'Linked Successfully',
+        description: isEs 
+          ? 'Se vinculó el ID de Google Sheets. Inicia sesión con Google para sincronizar tus datos.' 
+          : 'Google Sheets ID linked. Please sign in with Google to sync your data.',
+      });
+    }
   };
 
   const handleSettingChange = (key: keyof Settings, value: any) => {
