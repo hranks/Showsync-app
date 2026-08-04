@@ -297,38 +297,56 @@ export async function fetchDataFromSheet(
     if (eventsRes.ok) {
       const data = await eventsRes.json();
       const rows = data.values || [];
+      const parseNumber = (val: any): number => {
+        if (val === undefined || val === null || val === '') return 0;
+        if (typeof val === 'number') return val;
+        let str = String(val).trim();
+        str = str.replace(/[^\d.,-]/g, '');
+        if (str.includes(',') && str.includes('.')) {
+          if (str.indexOf(',') < str.indexOf('.')) {
+            str = str.replace(/,/g, '');
+          } else {
+            str = str.replace(/\./g, '').replace(',', '.');
+          }
+        } else if (str.includes(',')) {
+          const parts = str.split(',');
+          if (parts[1] && parts[1].length === 3) {
+            str = str.replace(/,/g, '');
+          } else {
+            str = str.replace(',', '.');
+          }
+        }
+        const num = parseFloat(str);
+        return isNaN(num) ? 0 : num;
+      };
+
       events = rows.map((row: any[]) => {
         let parsedDate = new Date();
         if (row[1]) {
-          if (row[1].includes('-')) {
-            const parts = row[1].split('-');
-            if (parts.length === 3) {
-              const y = parseInt(parts[0], 10);
-              const m = parseInt(parts[1], 10);
-              const d = parseInt(parts[2], 10);
-              parsedDate = new Date(y, m - 1, d);
-            } else {
-              parsedDate = new Date(row[1]);
-            }
-          } else if (row[1].includes('/')) {
-            const parts = row[1].split('/');
-            if (parts.length === 3) {
-              const p1 = parseInt(parts[0], 10);
-              const p2 = parseInt(parts[1], 10);
-              const y = parseInt(parts[2], 10);
-              // Prefer DD/MM/YYYY
-              if (p2 > 12) {
-                 // It must be MM/DD/YYYY if the second part is > 12
-                 parsedDate = new Date(y, p1 - 1, p2);
-              } else {
-                 // Assume DD/MM/YYYY
-                 parsedDate = new Date(y, p2 - 1, p1);
-              }
-            } else {
-              parsedDate = new Date(row[1]);
-            }
+          const dateStr = String(row[1]).trim();
+          const standardParsed = new Date(dateStr);
+          if (!isNaN(standardParsed.getTime())) {
+            parsedDate = standardParsed;
           } else {
-            parsedDate = new Date(row[1]);
+            const cleanStr = dateStr.replace(/\s+/g, '');
+            const parts = cleanStr.split(/[-/]/);
+            if (parts.length === 3) {
+              const p0 = parseInt(parts[0], 10);
+              const p1 = parseInt(parts[1], 10);
+              const p2 = parseInt(parts[2], 10);
+              
+              if (parts[0].length === 4) {
+                parsedDate = new Date(p0, p1 - 1, p2);
+              } else if (parts[2].length === 4) {
+                if (p0 > 12) {
+                  parsedDate = new Date(p2, p1 - 1, p0);
+                } else if (p1 > 12) {
+                  parsedDate = new Date(p2, p0 - 1, p1);
+                } else {
+                  parsedDate = new Date(p2, p1 - 1, p0);
+                }
+              }
+            }
           }
         }
         if (isNaN(parsedDate.getTime())) {
@@ -342,14 +360,14 @@ export async function fetchDataFromSheet(
           endTime: row[3] || '',
           venueName: row[4] || '',
           eventType: (row[5] || 'Club') as any,
-          hours: parseFloat(row[6]) || 0,
-          overtimeHours: parseFloat(row[7]) || 0,
-          rate: parseFloat(row[8]) || 0,
-          totalEarnings: parseFloat(row[9]) || 0,
-          paymentAdvanceNIO: parseFloat(row[10]) || 0,
-          paymentAdvanceUSD: parseFloat(row[11]) || 0,
-          consumptionsNIO: parseFloat(row[12]) || 0,
-          consumptionsUSD: parseFloat(row[13]) || 0,
+          hours: parseNumber(row[6]),
+          overtimeHours: parseNumber(row[7]),
+          rate: parseNumber(row[8]),
+          totalEarnings: parseNumber(row[9]),
+          paymentAdvanceNIO: parseNumber(row[10]),
+          paymentAdvanceUSD: parseNumber(row[11]),
+          consumptionsNIO: parseNumber(row[12]),
+          consumptionsUSD: parseNumber(row[13]),
           notes: row[14] || ''
         };
       });

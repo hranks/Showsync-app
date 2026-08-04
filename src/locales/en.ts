@@ -25,7 +25,7 @@ export const en = {
         stats: {
             monthlyIncome: "This Month's Income",
             gigsCount: 'from {count} gigs',
-            monthlyHours: "This Month's Hours",
+            monthlyHours: "Total Hours",
             hoursWorked: 'Total hours worked',
             totalGigs: 'Total Gigs This Month',
             eventsPlayed: 'Events played',

@@ -34,7 +34,7 @@ export function ReportsTable({ events }: ReportsTableProps) {
     return events.reduce((acc, event) => {
         const pendingUSD = (event.totalEarnings || 0) - (event.paymentAdvanceUSD || 0) - (event.consumptionsUSD || 0);
 
-        acc.totalHours += event.hours || 0;
+        acc.totalHours += (event.hours || 0) + (event.overtimeHours || 0);
         acc.totalEarningsUSD += event.totalEarnings || 0;
         acc.totalAdvanceUSD += event.paymentAdvanceUSD || 0;
         acc.totalAdvanceNIO += event.paymentAdvanceNIO || 0;
