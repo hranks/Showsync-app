@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Event } from '@/types';
-import { getAccessToken, logout } from '@/lib/auth';
+import { getAccessToken, logout, clearGoogleToken } from '@/lib/auth';
 import { syncDataToSheet } from '@/lib/sheets';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
@@ -9,6 +9,7 @@ import { useSettingsStore } from '@/hooks/use-settings-store';
 export function useEvents() {
   const [events, setEvents] = useState<Event[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [hasPulled, setHasPulled] = useState(false);
   const { toast } = useToast();
   const { t } = useTranslation();
   const { settings } = useSettingsStore();
@@ -63,7 +64,7 @@ export function useEvents() {
     } catch (err) {
       console.error('Background sync failed:', err);
       if (err instanceof Error && err.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
-        logout();
+        clearGoogleToken();
       }
       toast({
         title: settings.language === 'es' ? 'Error de Sincronización' : 'Sync Error',
@@ -93,12 +94,14 @@ export function useEvents() {
               const y = parseInt(parts[0], 10);
               const m = parseInt(parts[1], 10);
               const d = parseInt(parts[2], 10);
-              parsedDate = new Date(y, m - 1, d);
+              parsedDate = new Date(y, m - 1, d, 12, 0, 0);
             } else {
-              parsedDate = new Date(e.date);
+              const dObj = new Date(e.date);
+              parsedDate = new Date(dObj.getFullYear(), dObj.getMonth(), dObj.getDate(), 12, 0, 0);
             }
           } else {
-            parsedDate = new Date(e.date);
+            const dObj = new Date(e.date);
+            parsedDate = new Date(dObj.getFullYear(), dObj.getMonth(), dObj.getDate(), 12, 0, 0);
           }
           return {
             ...e,
@@ -151,7 +154,7 @@ export function useEvents() {
     } catch (error) {
       console.error('Error pulling from sheets:', error);
       if (error instanceof Error && error.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
-        logout();
+        clearGoogleToken();
       }
     }
     return false;
@@ -160,6 +163,17 @@ export function useEvents() {
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
+
+  useEffect(() => {
+    if (isInitialized && settings.sheetsSyncEnabled && settings.spreadsheetId && !hasPulled) {
+      setHasPulled(true);
+      pullFromSheets().then((success) => {
+        if (success) {
+          console.log('Silently auto-pulled recent direct Google Sheets edits on mount.');
+        }
+      });
+    }
+  }, [isInitialized, settings.sheetsSyncEnabled, settings.spreadsheetId, hasPulled, pullFromSheets]);
 
   const addEvent = useCallback(async (event: Omit<Event, 'id'>) => {
     const newEvent = { ...event, id: crypto.randomUUID() };

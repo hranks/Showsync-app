@@ -25,12 +25,12 @@ export const es = {
         stats: {
             monthlyIncome: "Ingresos del Mes",
             gigsCount: 'de {count} toques',
-            monthlyHours: "Horas Totales",
-            hoursWorked: 'Total de horas trabajadas',
+            monthlyHours: "Horas del Mes",
+            hoursWorked: 'Total de horas trabajadas este mes',
             totalGigs: 'Toques Totales del Mes',
             eventsPlayed: 'Eventos tocados',
             avgRate: 'Tarifa Promedio',
-            avgRateDescription: 'Promedio de todos los toques',
+            avgRateDescription: 'Tarifa promedio de este mes',
         },
         income: {
             title: 'Ingresos Mensuales',

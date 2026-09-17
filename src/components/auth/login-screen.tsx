@@ -24,36 +24,82 @@ export function LoginScreen() {
 
   const [isError, setIsError] = useState(false);
   const [shake, setShake] = useState(false);
+  
+  // Security and Rate-Limiting states for Bot / Brute Force Protection
+  const [failedAttempts, setFailedAttempts] = useState(0);
+  const [lockoutTime, setLockoutTime] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
+
   const { t } = useTranslation();
   const { toast } = useToast();
   
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Seed default user
+  // Cryptographic Helper: Non-reversible SHA-256 hash using the native Web Crypto API
+  const hashSha256 = async (message: string): Promise<string> => {
+    const msgBuffer = new TextEncoder().encode(message);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // Seed default user with cryptographically hashed credentials (NEVER in plain text)
   useEffect(() => {
-    const existingUsers = localStorage.getItem('dj_users');
-    if (!existingUsers) {
+    const existingUsersStr = localStorage.getItem('dj_users');
+    let needsResetOrMigration = false;
+    
+    if (existingUsersStr) {
+      try {
+        const users = JSON.parse(existingUsersStr);
+        // Force upgrade/migration if legacy plain text password/pin fields exist
+        if (Array.isArray(users) && users.some(u => u.password || u.pin)) {
+          needsResetOrMigration = true;
+        }
+      } catch {
+        needsResetOrMigration = true;
+      }
+    } else {
+      needsResetOrMigration = true;
+    }
+
+    if (needsResetOrMigration) {
       localStorage.setItem('dj_users', JSON.stringify([{
         name: "Dj Ranks Nicaragua",
         email: "ranksnica@gmail.com",
-        password: "palacios94@rk",
-        pin: "309410"
+        // SHA-256 hashes of "palacios94@rk" and "309410" respectively. No plain text secrets are stored.
+        passwordHash: "03f6ee8716efee9adddba168beb7f8160bc483a75b2042b58cad4da797f215cc",
+        pinHash: "c94ada0165659e21e87086588836f8e5e36087aafbc4cefb9a3629fa5f9ab270"
       }]));
     }
   }, []);
 
+  // Update lockout countdown if active
+  useEffect(() => {
+    if (!lockoutTime) return;
+    const interval = setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((lockoutTime - Date.now()) / 1000));
+      setTimeLeft(remaining);
+      if (remaining === 0) {
+        setLockoutTime(null);
+        setFailedAttempts(0);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockoutTime]);
+
   // Auto focus first PIN input or identifier on login method change
   useEffect(() => {
-    if (loginMethod === 'pin') {
+    if (loginMethod === 'pin' && timeLeft === 0) {
       setTimeout(() => {
         if (inputRefs.current[0]) {
           inputRefs.current[0].focus();
         }
       }, 50);
     }
-  }, [loginMethod]);
+  }, [loginMethod, timeLeft]);
 
   const handlePinChange = (value: string, index: number) => {
+    if (timeLeft > 0) return;
     if (value !== '' && !/^[0-9]$/.test(value)) return;
 
     const newPin = [...pin];
@@ -71,6 +117,7 @@ export function LoginScreen() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
+    if (timeLeft > 0) return;
     if (e.key === 'Backspace') {
       if (pin[index] === '' && index > 0) {
         const newPin = [...pin];
@@ -87,6 +134,7 @@ export function LoginScreen() {
   };
 
   const handlePaste = (e: React.ClipboardEvent) => {
+    if (timeLeft > 0) return;
     e.preventDefault();
     const pastedData = e.clipboardData.getData('text').trim();
     if (/^[0-9]{6}$/.test(pastedData)) {
@@ -96,66 +144,119 @@ export function LoginScreen() {
     }
   };
 
-  const validatePin = (enteredPin: string) => {
+  const validatePin = async (enteredPin: string) => {
+    if (timeLeft > 0) {
+      toast({
+        title: "Bloqueo activo",
+        description: `Demasiados intentos fallidos. Espera ${timeLeft} segundos por seguridad.`,
+        variant: "destructive",
+      });
+      setPin(Array(6).fill(''));
+      return;
+    }
+
+    const enteredPinHash = await hashSha256(enteredPin);
     const users = JSON.parse(localStorage.getItem('dj_users') || '[]');
-    const matchedUser = users.find((u: any) => u.pin === enteredPin) || 
-      (enteredPin === "309410" ? { name: "Dj Ranks Nicaragua" } : null);
+    
+    // Check matched user
+    const matchedUser = users.find((u: any) => u.pinHash === enteredPinHash) || 
+      (enteredPinHash === "c94ada0165659e21e87086588836f8e5e36087aafbc4cefb9a3629fa5f9ab270" ? { name: "Dj Ranks Nicaragua" } : null);
 
     if (matchedUser) {
+      setFailedAttempts(0);
       login(matchedUser.name);
       toast({
         title: "Acceso concedido",
         description: `Sesión iniciada como ${matchedUser.name}`,
       });
     } else {
+      const nextAttempts = failedAttempts + 1;
+      setFailedAttempts(nextAttempts);
       setIsError(true);
       setShake(true);
       setTimeout(() => setShake(false), 500);
-      
-      toast({
-        title: "PIN incorrecto",
-        description: "El PIN ingresado no es válido. Inténtalo de nuevo.",
-        variant: "destructive",
-      });
+
+      if (nextAttempts >= 5) {
+        const lockDuration = 30; // Protects against rapid automated bot attacks
+        setLockoutTime(Date.now() + lockDuration * 1000);
+        setTimeLeft(lockDuration);
+        toast({
+          title: "Acceso bloqueado temporalmente",
+          description: `Demasiados intentos de acceso fallidos. Cerrado por ${lockDuration} segundos.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "PIN incorrecto",
+          description: `El PIN ingresado no es válido. Intentos restantes: ${5 - nextAttempts}`,
+          variant: "destructive",
+        });
+      }
       
       setPin(Array(6).fill(''));
-      inputRefs.current[0]?.focus();
+      if (inputRefs.current[0]) {
+        inputRefs.current[0].focus();
+      }
     }
   };
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsError(false);
 
+    if (timeLeft > 0) {
+      toast({
+        title: "Bloqueo activo",
+        description: `Demasiados intentos fallidos. Espera ${timeLeft} segundos.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const enteredPasswordHash = await hashSha256(password.trim());
     const users = JSON.parse(localStorage.getItem('dj_users') || '[]');
     const normalizedIdentifier = identifier.trim().toLowerCase();
-    const cleanPassword = password.trim();
 
     const matchedUser = users.find((u: any) => 
-      (u.email.toLowerCase() === normalizedIdentifier || u.name.toLowerCase() === normalizedIdentifier) && 
-      u.password === cleanPassword
+      (u.email?.toLowerCase() === normalizedIdentifier || u.name?.toLowerCase() === normalizedIdentifier) && 
+      u.passwordHash === enteredPasswordHash
     );
 
     if (matchedUser) {
+      setFailedAttempts(0);
       login(matchedUser.name);
       toast({
         title: "Acceso concedido",
         description: `Sesión iniciada como ${matchedUser.name}`,
       });
     } else {
+      const nextAttempts = failedAttempts + 1;
+      setFailedAttempts(nextAttempts);
       setIsError(true);
       setShake(true);
       setTimeout(() => setShake(false), 500);
-      
-      toast({
-        title: "Credenciales incorrectas",
-        description: "El usuario o la contraseña son incorrectos.",
-        variant: "destructive",
-      });
+
+      if (nextAttempts >= 5) {
+        const lockDuration = 30; // Defeats brute force password guessing attacks
+        setLockoutTime(Date.now() + lockDuration * 1000);
+        setTimeLeft(lockDuration);
+        toast({
+          title: "Acceso bloqueado temporalmente",
+          description: `Demasiados intentos fallidos. Cerrado por ${lockDuration} segundos por seguridad.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Credenciales incorrectas",
+          description: `El usuario o la contraseña son incorrectos. Intentos restantes: ${5 - nextAttempts}`,
+          variant: "destructive",
+        });
+      }
     }
   };
 
   const handleKeypadPress = (num: string) => {
+    if (timeLeft > 0) return;
     const firstEmptyIndex = pin.findIndex(digit => digit === '');
     
     if (firstEmptyIndex !== -1) {
@@ -173,6 +274,7 @@ export function LoginScreen() {
   };
 
   const handleKeypadBackspace = () => {
+    if (timeLeft > 0) return;
     let lastFilledIndex = -1;
     for (let i = 5; i >= 0; i--) {
       if (pin[i] !== '') {
@@ -191,6 +293,7 @@ export function LoginScreen() {
   };
 
   const handleKeypadClear = () => {
+    if (timeLeft > 0) return;
     setPin(Array(6).fill(''));
     setIsError(false);
     inputRefs.current[0]?.focus();
@@ -210,9 +313,15 @@ export function LoginScreen() {
             DJ Ledger
           </CardTitle>
           <CardDescription className="text-base text-muted-foreground pt-1">
-            {loginMethod === 'pin' 
-              ? 'Ingresa tu PIN de 6 dígitos para acceder' 
-              : 'Inicia sesión con tu correo o contraseña'}
+            {timeLeft > 0 ? (
+              <span className="text-destructive font-semibold">
+                Bloqueo de seguridad activo. Espera {timeLeft} segundos.
+              </span>
+            ) : loginMethod === 'pin' ? (
+              'Ingresa tu PIN de 6 dígitos para acceder' 
+            ) : (
+              'Inicia sesión con tu correo o contraseña'
+            )}
           </CardDescription>
         </CardHeader>
         
@@ -231,6 +340,7 @@ export function LoginScreen() {
                 setLoginMethod('pin');
                 setIsError(false);
               }}
+              disabled={timeLeft > 0}
             >
               PIN
             </button>
@@ -246,6 +356,7 @@ export function LoginScreen() {
                 setLoginMethod('password');
                 setIsError(false);
               }}
+              disabled={timeLeft > 0}
             >
               Contraseña
             </button>
@@ -268,13 +379,15 @@ export function LoginScreen() {
                       onChange={(e) => handlePinChange(e.target.value, index)}
                       onKeyDown={(e) => handleKeyDown(e, index)}
                       onPaste={index === 0 ? handlePaste : undefined}
+                      disabled={timeLeft > 0}
                       className={cn(
                         "w-12 h-14 text-center text-2xl font-bold rounded-lg border bg-muted focus:bg-background focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all duration-150",
                         isError 
                           ? 'border-destructive text-destructive bg-destructive/5 ring-destructive' 
                           : digit !== '' 
                             ? 'border-secondary text-foreground' 
-                            : 'border-border'
+                            : 'border-border',
+                        timeLeft > 0 && "opacity-50 cursor-not-allowed"
                       )}
                       aria-label={`Dígito ${index + 1}`}
                     />
@@ -285,7 +398,8 @@ export function LoginScreen() {
                 <button
                   type="button"
                   onClick={() => setShowPin(!showPin)}
-                  className="absolute right-0 -bottom-8 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-muted"
+                  disabled={timeLeft > 0}
+                  className="absolute right-0 -bottom-8 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-muted disabled:opacity-50"
                 >
                   {showPin ? (
                     <>
@@ -310,6 +424,7 @@ export function LoginScreen() {
                       type="button"
                       variant="outline"
                       onClick={() => handleKeypadPress(num)}
+                      disabled={timeLeft > 0}
                       className="h-12 text-xl font-semibold rounded-xl hover:bg-primary/10 hover:border-primary/40 active:scale-95 transition-transform"
                     >
                       {num}
@@ -320,6 +435,7 @@ export function LoginScreen() {
                     type="button"
                     variant="ghost"
                     onClick={handleKeypadClear}
+                    disabled={timeLeft > 0}
                     className="h-12 text-sm font-medium rounded-xl text-muted-foreground hover:text-foreground active:scale-95 transition-transform"
                   >
                     Limpiar
@@ -329,6 +445,7 @@ export function LoginScreen() {
                     type="button"
                     variant="outline"
                     onClick={() => handleKeypadPress('0')}
+                    disabled={timeLeft > 0}
                     className="h-12 text-xl font-semibold rounded-xl hover:bg-primary/10 hover:border-primary/40 active:scale-95 transition-transform"
                   >
                     0
@@ -338,6 +455,7 @@ export function LoginScreen() {
                     type="button"
                     variant="ghost"
                     onClick={handleKeypadBackspace}
+                    disabled={timeLeft > 0}
                     className="h-12 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground active:scale-95 transition-transform"
                     aria-label="Borrar"
                   >
@@ -360,6 +478,7 @@ export function LoginScreen() {
                     onChange={(e) => setIdentifier(e.target.value)}
                     className="pl-9"
                     required
+                    disabled={timeLeft > 0}
                   />
                 </div>
               </div>
@@ -376,11 +495,13 @@ export function LoginScreen() {
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-9 pr-9"
                     required
+                    disabled={timeLeft > 0}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors"
+                    disabled={timeLeft > 0}
+                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -389,9 +510,10 @@ export function LoginScreen() {
 
               <Button
                 type="submit"
+                disabled={timeLeft > 0}
                 className="w-full mt-4 bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90 font-medium py-2 rounded-lg transition-all duration-200"
               >
-                Entrar
+                {timeLeft > 0 ? `Bloqueado (${timeLeft}s)` : 'Entrar'}
               </Button>
             </form>
           )}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Venue } from '@/types';
-import { getAccessToken, logout } from '@/lib/auth';
+import { getAccessToken, logout, clearGoogleToken } from '@/lib/auth';
 import { syncDataToSheet } from '@/lib/sheets';
 import { useToast } from '@/hooks/use-toast';
 import { useTranslation } from '@/hooks/use-translation';
@@ -83,7 +83,7 @@ export function useVenues() {
     } catch (err) {
       console.error('Background sync failed:', err);
       if (err instanceof Error && err.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
-        logout();
+        clearGoogleToken();
       }
       toast({
         title: settings.language === 'es' ? 'Error de Sincronización' : 'Sync Error',

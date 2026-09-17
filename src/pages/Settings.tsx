@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/types';
 import { useTranslation } from '@/hooks/use-translation';
 import { sendReport } from '@/ai/flows/send-report-flow';
-import { initAuth, googleSignIn, getAccessToken, logout } from '@/lib/auth';
+import { initAuth, googleSignIn, getAccessToken, logout, clearGoogleToken } from '@/lib/auth';
 import type { User } from 'firebase/auth';
 import { createSpreadsheet, syncDataToSheet, fetchDataFromSheet } from '@/lib/sheets';
 import { useEvents } from '@/hooks/use-events-store';
@@ -142,7 +142,7 @@ export default function SettingsPage() {
 
   const handleSheetsError = (error: any, isEs: boolean) => {
     if (error instanceof Error && error.message === 'UNAUTHORIZED_OR_EXPIRED_TOKEN') {
-      logout();
+      clearGoogleToken();
       setToken(null);
       setUser(null);
       setNeedsAuth(true);

@@ -90,11 +90,15 @@ export const getAccessToken = async (): Promise<string | null> => {
   return cachedAccessToken;
 };
 
-export const logout = async () => {
-  await auth.signOut();
+export const clearGoogleToken = () => {
   cachedAccessToken = null;
   if (typeof window !== 'undefined') {
     localStorage.removeItem('google_access_token');
     localStorage.removeItem('google_access_token_expiry');
   }
+};
+
+export const logout = async () => {
+  await auth.signOut();
+  clearGoogleToken();
 };

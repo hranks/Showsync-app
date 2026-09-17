@@ -57,12 +57,12 @@ export const getColumns = (
   {
     header: t('columns.hours'),
     cell: ({ row }) => {
-      const hours = row.original.hours;
-      const overtime = row.original.overtimeHours;
+      const hours = row.original.hours || 0;
+      const overtime = row.original.overtimeHours || 0;
       const startTime = row.original.startTime;
       const endTime = row.original.endTime;
 
-      if (!startTime || !endTime || hours <= 0) {
+      if (hours <= 0 && overtime <= 0 && (!startTime || !endTime)) {
         return <Badge variant="outline">{t('columns.needsInfo')}</Badge>;
       }
       return (
@@ -71,9 +71,11 @@ export const getColumns = (
             {hours.toFixed(2)}
             {overtime > 0 ? ` (+${overtime} OT)` : ''}
           </div>
-          <div className="text-xs text-muted-foreground">
-            {startTime} - {endTime}
-          </div>
+          {startTime && endTime && (
+            <div className="text-xs text-muted-foreground">
+              {startTime} - {endTime}
+            </div>
+          )}
         </div>
       );
     },

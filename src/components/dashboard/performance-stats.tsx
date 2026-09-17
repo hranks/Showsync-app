@@ -31,10 +31,9 @@ export function PerformanceStats({ events }: PerformanceStatsProps) {
     );
 
     const totalIncome = currentMonthEvents.reduce((acc, event) => acc + event.totalEarnings, 0);
-    const totalHours = events.reduce((acc, event) => acc + (event.hours || 0) + (event.overtimeHours || 0), 0);
+    const totalHours = currentMonthEvents.reduce((acc, event) => acc + (event.hours || 0) + (event.overtimeHours || 0), 0);
     const totalGigs = currentMonthEvents.length;
-    const overallIncome = events.reduce((acc, event) => acc + (event.totalEarnings || 0), 0);
-    const avgPerHour = totalHours > 0 ? overallIncome / totalHours : 0;
+    const avgPerHour = totalHours > 0 ? totalIncome / totalHours : 0;
     
     setStats({ totalIncome, totalHours, totalGigs, avgPerHour });
   }, [events]);
