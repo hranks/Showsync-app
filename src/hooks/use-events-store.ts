@@ -136,7 +136,7 @@ export function useEvents() {
       const { fetchDataFromSheet } = await import('@/lib/sheets');
       const data = await fetchDataFromSheet(token, settings.spreadsheetId);
       
-      if (data) {
+      if (data && (data.events.length > 0 || data.venues.length > 0)) {
         const response = await fetch('/api/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

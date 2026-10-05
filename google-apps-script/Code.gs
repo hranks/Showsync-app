@@ -79,6 +79,16 @@ function setupSpreadsheet() {
     .setFontWeight('bold')
     .setHorizontalAlignment('center');
   venuesSheet.setFrozenRows(1);
+
+  // 3. Eliminar hojas obsoletas en conflicto si existen (Eventos y Locales)
+  const legacyEvents = ss.getSheetByName('Eventos');
+  if (legacyEvents) {
+    try { ss.deleteSheet(legacyEvents); } catch (e) {}
+  }
+  const legacyVenues = ss.getSheetByName('Locales');
+  if (legacyVenues) {
+    try { ss.deleteSheet(legacyVenues); } catch (e) {}
+  }
   
   // Insertar un local por defecto si no hay ninguno para facilitar las pruebas
   if (venuesSheet.getLastRow() === 1) {
