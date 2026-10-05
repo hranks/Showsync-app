@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>DJ Ledger - Panel de Control</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Syne:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            display: ['Syne', 'sans-serif'],
+            mono: ['"IBM Plex Mono"', 'monospace'],
+          },
+          colors: {
+            background: '#0B0F19',
+            surface: '#151C2C',
+            surfaceHover: '#1D263B',
+            primary: '#6366F1', // Indigo
+            secondary: '#06B6D4', // Cyan
+            success: '#10B981', // Emerald
+            warning: '#F59E0B', // Amber
+            destructive: '#EF4444', // Red
+            textMuted: '#94A3B8',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #0B0F19;
+      color: #F8FAFC;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    /* Estilos personalizados para scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0B0F19;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1E293B;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col antialiased">
+
+  <!-- Header principal -->
+  <header class="border-b border-slate-800 bg-[#0F172A] px-4 py-3 sticky top-0 z-50 shadow-lg">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="h-9 w-9 rounded-lg bg-gradient-to-tr from-primary to-secondary flex items-center justify-center text-white font-black shadow-indigo-500/20 shadow-md">
+          🎧
+        </div>
+        <div>
+          <h1 class="font-display text-lg font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-indigo-200">
+            DJ LEDGER
+          </h1>
+          <p class="text-[10px] text-textMuted tracking-wider font-mono">COMPANION v2.1</p>
+        </div>
+      </div>
+      
+      <!-- Indicador de Estado de Conexión -->
+      <div class="flex items-center gap-2 bg-slate-900/60 px-3 py-1.5 rounded-full border border-slate-800">
+        <span class="relative flex h-2 w-2">
+          <span id="connPulse" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+          <span id="connIndicator" class="relative inline-flex rounded-full h-2 w-2 bg-success"></span>
+        </span>
+        <span id="connStatusText" class="text-xs font-medium text-slate-300">Sincronizado</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal de la App -->
+  <main class="flex-1 max-w-6xl w-full mx-auto p-4 flex flex-col md:flex-row gap-6">
+    
+    <!-- Barra lateral de navegación (Para pantallas medianas y grandes) -->
+    <aside class="md:w-64 shrink-0 flex flex-col gap-2">
+      <!-- Info de Usuario / Setup -->
+      <div class="bg-surface/60 rounded-xl p-4 border border-slate-800/80 mb-2">
+        <p class="text-xs text-textMuted font-medium mb-1">PROPIETARIO DE SESIÓN</p>
+        <p id="ownerEmail" class="text-sm font-semibold text-slate-200 truncate">Google Sheet User</p>
+        <div class="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-textMuted">
+          <span>Hojas detectadas:</span>
+          <span class="font-mono text-slate-300" id="detectedSheets">Cargando...</span>
+        </div>
+      </div>
+
+      <!-- Enlaces de navegación interactiva -->
+      <nav class="flex flex-row md:flex-col overflow-x-auto md:overflow-x-visible gap-1.5 p-1 bg-slate-950/40 rounded-xl md:bg-transparent md:p-0">
+        <button onclick="switchTab('dashboard')" id="btn-dashboard" class="nav-btn flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap bg-primary text-white shadow-lg shadow-indigo-600/10">
+          <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+          <span>Dashboard</span>
+        </button>
+        <button onclick="switchTab('events')" id="btn-events" class="nav-btn flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap text-textMuted hover:bg-slate-900 hover:text-white">
+          <i data-lucide="music" class="w-4 h-4"></i>
+          <span>Eventos</span>
+        </button>
+        <button onclick="switchTab('add-event')" id="btn-add-event" class="nav-btn flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap text-textMuted hover:bg-slate-900 hover:text-white">
+          <i data-lucide="plus-circle" class="w-4 h-4"></i>
+          <span>Nuevo Evento</span>
+        </button>
+        <button onclick="switchTab('venues')" id="btn-venues" class="nav-btn flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap text-textMuted hover:bg-slate-900 hover:text-white">
+          <i data-lucide="map-pin" class="w-4 h-4"></i>
+          <span>Locales / Clubes</span>
+        </button>
+        <button onclick="switchTab('diagnostics')" id="btn-diagnostics" class="nav-btn flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap text-textMuted hover:bg-slate-900 hover:text-white">
+          <i data-lucide="activity" class="w-4 h-4"></i>
+          <span>Diagnósticos</span>
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Contenedor Dinámico de Vistas -->
+    <section class="flex-1 min-w-0 flex flex-col gap-6">
+
+      <!-- Spinner de Carga General -->
+      <div id="mainSpinner" class="flex flex-col items-center justify-center py-24 bg-surface/30 rounded-2xl border border-slate-800">
+        <div class="h-10 w-10 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent mb-4"></div>
+        <p class="text-sm font-medium text-slate-300">Cargando datos desde la hoja de cálculo...</p>
+        <p class="text-xs text-textMuted mt-1">Esto puede demorar unos segundos</p>
+      </div>
+
+      <!-- VISTA: DASHBOARD -->
+      <div id="view-dashboard" class="tab-view hidden flex flex-col gap-6">
+        
+        <!-- Saludo y Acción Rápida -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-gradient-to-r from-indigo-900/20 to-cyan-900/10 p-6 rounded-2xl border border-indigo-500/10">
+          <div>
+            <h2 class="font-display text-2xl font-bold text-white">¡Hola, DJ! 🎚️</h2>
+            <p class="text-sm text-textMuted mt-1">Este es tu panel en tiempo real sincronizado directamente con tu hoja de cálculo activa.</p>
+          </div>
+          <button onclick="refreshData()" class="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 rounded-lg text-xs font-semibold border border-slate-800 flex items-center gap-2 text-indigo-400 transition-colors">
+            <i data-lucide="rotate-cw" class="w-3.5 h-3.5" id="refreshIcon"></i>
+            Actualizar Datos
+          </button>
+        </div>
+
+        <!-- Tarjetas de Métricas principales (Sin píldoras, números de ancho fijo) -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          
+          <!-- Total de Ganancias -->
+          <div class="bg-surface p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-xs font-semibold text-textMuted tracking-wider">GANANCIAS TOTALES</span>
+              <div class="p-2 bg-indigo-500/10 rounded-lg text-indigo-400">
+                <i data-lucide="dollar-sign" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <p class="text-2xl font-mono tabular-nums font-bold text-white tracking-tight" id="statEarnings">
+                $0.00
+              </p>
+              <p class="text-[11px] text-indigo-400/80 mt-1 font-medium">Suma de todos tus eventos cargados</p>
+            </div>
+          </div>
+
+          <!-- Total Eventos -->
+          <div class="bg-surface p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-xs font-semibold text-textMuted tracking-wider">TOTAL EVENTOS</span>
+              <div class="p-2 bg-cyan-500/10 rounded-lg text-cyan-400">
+                <i data-lucide="calendar" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <p class="text-2xl font-mono tabular-nums font-bold text-white tracking-tight" id="statTotalEvents">
+                0
+              </p>
+              <p class="text-[11px] text-cyan-400/80 mt-1 font-medium">Historial completo en la hoja</p>
+            </div>
+          </div>
+
+          <!-- Eventos Confirmados -->
+          <div class="bg-surface p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-xs font-semibold text-textMuted tracking-wider">CONFIRMADOS / LISTOS</span>
+              <div class="p-2 bg-emerald-500/10 rounded-lg text-emerald-400">
+                <i data-lucide="check-circle" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <p class="text-2xl font-mono tabular-nums font-bold text-white tracking-tight" id="statConfirmedEvents">
+                0
+              </p>
+              <p class="text-[11px] text-emerald-400/80 mt-1 font-medium">Eventos listos y completados</p>
+            </div>
+          </div>
+
+          <!-- Locales Activos -->
+          <div class="bg-surface p-5 rounded-2xl border border-slate-800 shadow-xl flex flex-col justify-between">
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-xs font-semibold text-textMuted tracking-wider">LOCALES REGISTRADOS</span>
+              <div class="p-2 bg-pink-500/10 rounded-lg text-pink-400">
+                <i data-lucide="map" class="w-5 h-5"></i>
+              </div>
+            </div>
+            <div>
+              <p class="text-2xl font-mono tabular-nums font-bold text-white tracking-tight" id="statActiveVenues">
+                0
+              </p>
+              <p class="text-[11px] text-pink-400/80 mt-1 font-medium">Clubes y locales de tu red</p>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Próximos eventos destacados -->
+        <div class="bg-surface rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+          <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <i data-lucide="clock" class="text-primary w-4 h-4"></i>
+              <h3 class="font-display font-bold text-sm text-slate-200">Próximos Compromisos Recientes</h3>
+            </div>
+            <button onclick="switchTab('events')" class="text-xs text-primary font-semibold hover:underline">Ver lista completa</button>
+          </div>
+          <div class="p-1 divide-y divide-slate-800/60" id="recentEventsList">
+            <!-- Cargado de forma dinámica -->
+            <p class="text-sm text-textMuted text-center py-6">Cargando próximos eventos...</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- VISTA: LISTADO DE EVENTOS -->
+      <div id="view-events" class="tab-view hidden flex flex-col gap-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-surface p-5 rounded-2xl border border-slate-800 shadow-lg">
+          <div>
+            <h2 class="font-display text-xl font-bold text-white">Eventos Cargados</h2>
+            <p class="text-xs text-textMuted mt-0.5">Controla y edita el estado de cada evento de forma instantánea.</p>
+          </div>
+          <button onclick="switchTab('add-event')" class="px-3.5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-xs font-bold transition-all duration-150 flex items-center gap-1.5 shadow-md shadow-indigo-600/15">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+            Añadir Nuevo
+          </button>
+        </div>
+
+        <!-- Filtros y Búsqueda -->
+        <div class="bg-surface p-4 rounded-xl border border-slate-800 flex flex-col sm:flex-row gap-3">
+          <div class="flex-1 relative">
+            <i data-lucide="search" class="w-4 h-4 text-textMuted absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+            <input type="text" id="eventSearch" oninput="filterEvents()" placeholder="Buscar por título, cliente o local..." class="w-full bg-slate-950/60 border border-slate-800 rounded-lg py-2 pl-10 pr-4 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors">
+          </div>
+          
+          <!-- Filtro Segmentado -->
+          <div class="flex items-center gap-1 p-1 bg-slate-950/60 rounded-lg border border-slate-800/80">
+            <button onclick="setEventFilter('all')" id="filter-all" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 bg-slate-800 text-white">
+              Todos
+            </button>
+            <button onclick="setEventFilter('confirmed')" id="filter-confirmed" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 text-textMuted hover:text-white">
+              Confirmados
+            </button>
+            <button onclick="setEventFilter('pending')" id="filter-pending" class="filter-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 text-textMuted hover:text-white">
+              Pendientes
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista/Tabla de eventos (Optimizada para Responsivo y con Tabular Numerals) -->
+        <div class="bg-surface rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+          <!-- Vista Desktop / Tabla -->
+          <div class="hidden lg:block overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+              <thead>
+                <tr class="bg-slate-950/40 text-slate-400 border-b border-slate-800 text-[11px] tracking-wider uppercase font-bold">
+                  <th class="py-3.5 px-4">Fecha / Hora</th>
+                  <th class="py-3.5 px-4">Evento / Cliente</th>
+                  <th class="py-3.5 px-4">Local</th>
+                  <th class="py-3.5 px-4 text-right">Fee ($)</th>
+                  <th class="py-3.5 px-4">Estado</th>
+                  <th class="py-3.5 px-4 text-center">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="eventsTableBody" class="divide-y divide-slate-800/60">
+                <!-- Se inyecta dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Vista Mobile / Tarjetas -->
+          <div id="eventsCardsContainer" class="lg:hidden flex flex-col divide-y divide-slate-800/60">
+            <!-- Se inyecta dinámicamente -->
+          </div>
+
+          <div id="noEventsMessage" class="hidden py-12 text-center">
+            <i data-lucide="music-4" class="w-10 h-10 text-slate-700 mx-auto mb-3"></i>
+            <p class="text-sm text-textMuted">No se encontraron eventos cargados en este momento.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- VISTA: AÑADIR NUEVO EVENTO -->
+      <div id="view-add-event" class="tab-view hidden flex flex-col gap-4">
+        <div class="bg-surface p-5 rounded-2xl border border-slate-800 shadow-lg">
+          <div class="mb-5 border-b border-slate-800/80 pb-4">
+            <h2 class="font-display text-xl font-bold text-white">Registrar Nuevo Evento</h2>
+            <p class="text-xs text-textMuted mt-0.5">El evento se subirá automáticamente a Google Sheets al instante de enviarlo.</p>
+          </div>
+
+          <form id="addEventForm" onsubmit="handleEventSubmit(event)" class="space-y-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Título -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Título del Evento *</label>
+                <input type="text" id="evtTitle" required placeholder="Ej. Fiesta Privada - DJ Set Retro" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Cliente -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Nombre del Cliente *</label>
+                <input type="text" id="evtClientName" required placeholder="Ej. Sofía Rodríguez" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Local (Selección Dinámica) -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Local / Club *</label>
+                <select id="evtVenueSelect" required onchange="onVenueSelectChange()" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+                  <option value="">-- Seleccionar Local --</option>
+                  <!-- Cargado dinámicamente -->
+                </select>
+                <p class="text-[10px] text-textMuted mt-0.5">Si el local no figura, regístralo primero en la pestaña "Locales / Clubes".</p>
+              </div>
+
+              <!-- Fecha -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Fecha del Evento *</label>
+                <input type="date" id="evtDate" required class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Hora de Inicio -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Hora de Inicio (HH:MM) *</label>
+                <input type="time" id="evtStartTime" required class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Duración -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Duración Estimada (Horas) *</label>
+                <input type="number" id="evtDuration" required min="1" max="24" value="4" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono tabular-nums">
+              </div>
+
+              <!-- Fee (USD) -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Presupuesto / Honorarios (USD) *</label>
+                <div class="relative">
+                  <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
+                  <input type="number" id="evtFee" required min="0" placeholder="0.00" class="w-full bg-slate-950/60 border border-slate-800 rounded-lg py-2.5 pl-8 pr-4 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono tabular-nums">
+                </div>
+              </div>
+
+              <!-- Estado Inicial -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Estado del Evento</label>
+                <select id="evtStatus" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-semibold text-slate-300">
+                  <option value="pending" class="text-warning">⚠️ Pendiente de Confirmación</option>
+                  <option value="confirmed" class="text-success">✅ Confirmado / Listo</option>
+                  <option value="cancelled" class="text-destructive">❌ Cancelado / Postergado</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Notas -->
+            <div class="flex flex-col gap-1.5">
+              <label class="text-xs font-semibold text-slate-300">Notas / Requerimientos Técnicos</label>
+              <textarea id="evtNotes" rows="3" placeholder="Ej. Llevar cableado de audio XLR adicional, monitores de retorno activos, setup de luces..." class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500"></textarea>
+            </div>
+
+            <!-- Botones de Acción -->
+            <div class="pt-3 flex gap-3 justify-end">
+              <button type="button" onclick="switchTab('dashboard')" class="px-4 py-2.5 rounded-lg text-xs font-semibold border border-slate-800 hover:bg-slate-900 transition-colors text-slate-400">
+                Cancelar
+              </button>
+              <button type="submit" id="submitEventBtn" class="px-5 py-2.5 bg-primary hover:bg-primary/95 text-white rounded-lg text-xs font-bold transition-all duration-150 shadow-md shadow-indigo-600/20 flex items-center gap-1.5">
+                <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                Guardar Evento al Instante
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- VISTA: LOCALES / CLUBES -->
+      <div id="view-venues" class="tab-view hidden flex flex-col gap-6">
+        
+        <!-- Dos Columnas: Izquierda Listado, Derecha Formulario de registro -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          <!-- Columna Izquierda: Listado -->
+          <div class="lg:col-span-7 bg-surface rounded-2xl border border-slate-800 p-5 shadow-lg">
+            <h2 class="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <i data-lucide="map-pin" class="text-secondary w-4.5 h-4.5"></i>
+              Locales Registrados
+            </h2>
+            
+            <div class="space-y-3" id="venuesListContainer">
+              <!-- Se inyecta dinámicamente -->
+              <p class="text-sm text-textMuted text-center py-6">Cargando locales...</p>
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Formulario -->
+          <div class="lg:col-span-5 bg-surface rounded-2xl border border-slate-800 p-5 shadow-lg h-fit">
+            <h2 class="font-display text-lg font-bold text-white mb-4 flex items-center gap-2">
+              <i data-lucide="plus" class="text-indigo-400 w-4.5 h-4.5"></i>
+              Registrar Nuevo Local
+            </h2>
+            
+            <form id="addVenueForm" onsubmit="handleVenueSubmit(event)" class="space-y-4">
+              <!-- Nombre -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Nombre del Local *</label>
+                <input type="text" id="venName" required placeholder="Ej. Club Nocturno Amura" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Dirección -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Dirección Física</label>
+                <input type="text" id="venAddress" placeholder="Ej. Calle Falsa 123, CABA" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Persona de Contacto -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Contacto del Encargado</label>
+                <input type="text" id="venContact" placeholder="Ej. Roberto Martínez (Manager)" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500">
+              </div>
+
+              <!-- Teléfono -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Teléfono</label>
+                <input type="text" id="venPhone" placeholder="Ej. +54 9 11 5555-5555" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono">
+              </div>
+
+              <!-- Email -->
+              <div class="flex flex-col gap-1.5">
+                <label class="text-xs font-semibold text-slate-300">Correo Electrónico</label>
+                <input type="email" id="venEmail" placeholder="Ej. manager@club-amura.com" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono">
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <!-- Fee Base -->
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-xs font-semibold text-slate-300">Costo Base ($)</label>
+                  <input type="number" id="venDefaultFee" min="0" value="300" class="bg-slate-950/60 border border-slate-800 rounded-lg p-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 font-mono tabular-nums">
+                </div>
+
+                <!-- Color de Identificación (Para UI) -->
+                <div class="flex flex-col gap-1.5">
+                  <label class="text-xs font-semibold text-slate-300">Color Distintivo</label>
+                  <div class="flex items-center gap-2">
+                    <input type="color" id="venColorTheme" value="#06B6D4" class="h-10 w-12 bg-transparent border-0 cursor-pointer">
+                    <span class="text-xs font-mono text-textMuted" id="colorText">#06B6D4</span>
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" id="submitVenueBtn" class="w-full py-2.5 bg-secondary hover:bg-secondary/95 text-white rounded-lg text-xs font-bold transition-all duration-150 shadow-md shadow-cyan-600/25 flex items-center justify-center gap-1.5">
+                <i data-lucide="save" class="w-3.5 h-3.5"></i>
+                Registrar Local
+              </button>
+            </form>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- VISTA: DIAGNÓSTICOS Y CONFIGURACIÓN -->
+      <div id="view-diagnostics" class="tab-view hidden flex flex-col gap-6">
+        <div class="bg-surface p-5 rounded-2xl border border-slate-800 shadow-lg">
+          <h2 class="font-display text-xl font-bold text-white mb-2">Herramientas de Diagnóstico y Base de Datos</h2>
+          <p class="text-xs text-textMuted mb-6">Administra el estado físico de tu Google Sheet y soluciona posibles errores de formato.</p>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- Inicializar tablas -->
+            <div class="p-5 rounded-xl border border-slate-800 bg-slate-950/40 flex flex-col justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white mb-1">Inicializar Tablas / Estructura</h3>
+                <p class="text-xs text-textMuted">Crea de forma automática las hojas "Events" y "Venues" si no existen en este Google Sheet, junto con sus columnas correspondientes con estilo.</p>
+              </div>
+              <button onclick="runSetupSpreadsheet()" class="mt-4 w-fit px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold transition-all duration-150">
+                Inicializar Tablas de Cero
+              </button>
+            </div>
+
+            <!-- Ejecutar diagnósticos -->
+            <div class="p-5 rounded-xl border border-slate-800 bg-slate-950/40 flex flex-col justify-between">
+              <div>
+                <h3 class="text-sm font-bold text-white mb-1">Ejecutar Verificación de Conexión</h3>
+                <p class="text-xs text-textMuted">Inspecciona el ID del documento de Google Sheets actual y verifica el conteo físico de filas cargadas en cada base de datos.</p>
+              </div>
+              <button onclick="runDiagnosticsCheck()" class="mt-4 w-fit px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white border border-slate-700 rounded-lg text-xs font-bold transition-all duration-150">
+                Efectuar Diagnóstico Rápido
+              </button>
+            </div>
+
+          </div>
+
+          <!-- Consola de Resultados -->
+          <div class="mt-6">
+            <h4 class="text-xs font-semibold text-slate-300 mb-2">Resultados del Diagnóstico</h4>
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <pre id="diagnosticsOutput" class="text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap">Listo para ejecutar diagnóstico. Haz clic en uno de los botones superiores.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Pie de página premium -->
+  <footer class="mt-auto border-t border-slate-900 bg-slate-950/60 py-4 px-4 text-center text-xs text-textMuted">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+      <p>&copy; 2026 DJ Ledger Companion. Hecho con ❤️ para Google Sheets.</p>
+      <div class="flex gap-4">
+        <span>Sincronización en tiempo real</span>
+        <span>·</span>
+        <span>Modo Seguro Integrado</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- SISTEMA DE COMPONENTES INTERACTIVOS ABSOLUTOS (Alertas y Toasts) -->
+  <div id="toastNotification" class="fixed bottom-5 right-5 z-50 transform translate-y-10 opacity-0 transition-all duration-300 max-w-sm bg-surface p-4 rounded-xl border border-slate-700 shadow-2xl flex items-start gap-3">
+    <div id="toastIconContainer" class="p-1 rounded-lg">
+      <i id="toastIcon" class="w-5 h-5"></i>
+    </div>
+    <div class="flex-1 min-w-0">
+      <h4 id="toastTitle" class="text-sm font-bold text-white">Mensaje</h4>
+      <p id="toastMessage" class="text-xs text-textMuted mt-0.5">Detalles del mensaje...</p>
+    </div>
+    <button onclick="hideToast()" class="text-slate-400 hover:text-white shrink-0">
+      <i data-lucide="x" class="w-4 h-4"></i>
+    </button>
+  </div>
+
+  <!-- JavaScript interactivo -->
+  <script>
+    // Variables de Estado de la Aplicación
+    let currentTab = 'dashboard';
+    let appData = {
+      events: [],
+      venues: [],
+      stats: {
+        totalEvents: 0,
+        totalEarnings: 0,
+        confirmedEvents: 0,
+        activeVenues: 0
+      }
+    };
+    let activeEventFilter = 'all';
+    
+    // Al inicializar la página
+    window.addEventListener('load', () => {
+      // Reemplazar iconos con Lucide
+      lucide.createIcons();
+      
+      // Cargar datos reales desde Google Sheets de inmediato
+      refreshData();
+    });
+
+    /**
+     * Alterna la pestaña activa con animaciones suaves
+     */
+    function switchTab(tabId) {
+      currentTab = tabId;
+      
+      // Ocultar todas las pestañas
+      document.querySelectorAll('.tab-view').forEach(view => {
+        view.classList.add('hidden');
+      });
+      
+      // Quitar clases activas de todos los botones
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.className = "nav-btn flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap text-textMuted hover:bg-slate-900 hover:text-white";
+      });
+      
+      // Mostrar la pestaña seleccionada
+      const targetView = document.getElementById(`view-${tabId}`);
+      if (targetView) targetView.classList.remove('hidden');
+      
+      // Activar el botón correspondiente
+      const targetBtn = document.getElementById(`btn-${tabId}`);
+      if (targetBtn) {
+        targetBtn.className = "nav-btn flex items-center justify-center md:justify-start gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-150 whitespace-nowrap bg-primary text-white shadow-lg shadow-indigo-600/10";
+      }
+      
+      // Re-inicializar iconos Lucide por si se inyectaron elementos nuevos
+      lucide.createIcons();
+    }
+
+    /**
+     * Llama al backend de Google Apps Script para refrescar todos los datos de la hoja
+     */
+    function refreshData() {
+      setLoading(true);
+      
+      // Rotar icono de refrescar
+      const refreshIcon = document.getElementById('refreshIcon');
+      if (refreshIcon) refreshIcon.classList.add('animate-spin');
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        // En entorno Google Apps Script
+        google.script.run
+          .withSuccessHandler((data) => {
+            onDataLoaded(data);
+            setConnectedState(true);
+          })
+          .withFailureHandler((err) => {
+            console.error(err);
+            onError("No se pudieron descargar los datos de la hoja. Asegúrate de inicializar las tablas primero.");
+            setConnectedState(false);
+          })
+          .getDJData();
+      } else {
+        // Entorno de pruebas local (Mocking para poder probar localmente)
+        console.warn("Google Apps Script API no disponible. Utilizando datos simulados.");
+        setTimeout(() => {
+          const mockData = getMockData();
+          onDataLoaded(mockData);
+          setConnectedState(true);
+        }, 1000);
+      }
+    }
+
+    /**
+     * Callback ejecutado cuando se obtienen exitosamente los datos desde Google Sheets
+     */
+    function onDataLoaded(data) {
+      appData = data;
+      
+      // Actualizar stats de la barra lateral y Header
+      document.getElementById('detectedSheets').textContent = (data.events.length > 0 || data.venues.length > 0) ? "2 Hojas" : "Sin Inicializar";
+      
+      // Poblar el email del propietario si está disponible
+      if (typeof google !== 'undefined' && google.script) {
+        // Apps Script no siempre da acceso fácil al email directo sin alcances adicionales, ponemos una etiqueta amigable
+        document.getElementById('ownerEmail').textContent = "Sesión Activa";
+      } else {
+        document.getElementById('ownerEmail').textContent = "frankdj93@gmail.com";
+      }
+
+      // Renderizar secciones principales
+      renderStats();
+      renderRecentEvents();
+      renderEventsList();
+      renderVenuesList();
+      populateVenuesDropdown();
+
+      setLoading(false);
+      
+      const refreshIcon = document.getElementById('refreshIcon');
+      if (refreshIcon) refreshIcon.classList.remove('animate-spin');
+    }
+
+    /**
+     * Muestra / oculta el cargador global
+     */
+    function setLoading(isLoading) {
+      const spinner = document.getElementById('mainSpinner');
+      if (isLoading) {
+        spinner.classList.remove('hidden');
+        document.getElementById('view-dashboard').classList.add('hidden');
+        document.getElementById('view-events').classList.add('hidden');
+        document.getElementById('view-add-event').classList.add('hidden');
+        document.getElementById('view-venues').classList.add('hidden');
+        document.getElementById('view-diagnostics').classList.add('hidden');
+      } else {
+        spinner.classList.add('hidden');
+        // Mostrar la pestaña activa actual
+        const activeView = document.getElementById(`view-${currentTab}`);
+        if (activeView) activeView.classList.remove('hidden');
+      }
+    }
+
+    /**
+     * Modifica el indicador visual de conexión con Sheets
+     */
+    function setConnectedState(isConnected) {
+      const pulse = document.getElementById('connPulse');
+      const indicator = document.getElementById('connIndicator');
+      const text = document.getElementById('connStatusText');
+      
+      if (isConnected) {
+        pulse.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75";
+        indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-success";
+        text.textContent = "Sincronizado";
+        text.className = "text-xs font-medium text-slate-300";
+      } else {
+        pulse.className = "hidden";
+        indicator.className = "relative inline-flex rounded-full h-2 w-2 bg-destructive";
+        text.textContent = "Desconectado";
+        text.className = "text-xs font-medium text-destructive";
+      }
+    }
+
+    /**
+     * Renderiza las métricas numéricas del Dashboard
+     */
+    function renderStats() {
+      const stats = appData.stats;
+      
+      // Formatear Ganancias Totales
+      const formattedEarnings = new Intl.NumberFormat('es-AR', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: 0
+      }).format(stats.totalEarnings);
+
+      document.getElementById('statEarnings').textContent = formattedEarnings;
+      document.getElementById('statTotalEvents').textContent = stats.totalEvents;
+      document.getElementById('statConfirmedEvents').textContent = stats.confirmedEvents;
+      document.getElementById('statActiveVenues').textContent = stats.activeVenues;
+    }
+
+    /**
+     * Renderiza la lista corta de próximos compromisos en el Dashboard
+     */
+    function renderRecentEvents() {
+      const container = document.getElementById('recentEventsList');
+      container.innerHTML = '';
+      
+      // Filtrar sólo eventos confirmados o pendientes que tengan fecha futura o reciente
+      const filtered = appData.events
+        .filter(e => e.status !== 'cancelled')
+        .slice(0, 3); // Tomar los 3 más recientes
+      
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="py-6 text-center">
+            <p class="text-xs text-textMuted">No tienes compromisos próximos registrados.</p>
+          </div>
+        `;
+        return;
+      }
+
+      filtered.forEach(evt => {
+        const statusBadge = getStatusBadgeHTML(evt.status);
+        const venueText = evt.venueName ? evt.venueName : 'Sin Local Asignado';
+        
+        const div = document.createElement('div');
+        div.className = "p-4 hover:bg-slate-900/40 transition-colors flex flex-col sm:flex-row justify-between sm:items-center gap-2.5";
+        div.innerHTML = `
+          <div class="flex items-start gap-3">
+            <div class="p-2 bg-indigo-500/10 rounded-lg text-indigo-400 mt-0.5 shrink-0">
+              <i data-lucide="headphones" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h4 class="text-sm font-semibold text-white">${evt.title}</h4>
+              <div class="flex items-center gap-2 text-xs text-textMuted mt-1">
+                <span>${evt.clientName}</span>
+                <span>·</span>
+                <span class="flex items-center gap-1"><i data-lucide="map-pin" class="w-3 h-3 text-cyan-400"></i> ${venueText}</span>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center justify-between sm:justify-end gap-4 shrink-0">
+            <div class="text-right">
+              <p class="text-xs font-mono text-indigo-300 font-semibold">${evt.date} (${evt.startTime})</p>
+              <p class="text-sm font-mono tabular-nums text-white font-bold mt-0.5">$${evt.fee}</p>
+            </div>
+            ${statusBadge}
+          </div>
+        `;
+        container.appendChild(div);
+      });
+      
+      lucide.createIcons();
+    }
+
+    /**
+     * Renderiza el listado completo de eventos en la pestaña de Eventos
+     */
+    function renderEventsList() {
+      const tableBody = document.getElementById('eventsTableBody');
+      const cardsContainer = document.getElementById('eventsCardsContainer');
+      const searchVal = document.getElementById('eventSearch').value.toLowerCase();
+      
+      tableBody.innerHTML = '';
+      cardsContainer.innerHTML = '';
+
+      // Filtrar por término de búsqueda y filtro segmentado
+      let filtered = appData.events.filter(evt => {
+        const matchesSearch = evt.title.toLowerCase().includes(searchVal) || 
+                              evt.clientName.toLowerCase().includes(searchVal) || 
+                              evt.venueName.toLowerCase().includes(searchVal);
+        
+        const matchesFilter = activeEventFilter === 'all' || evt.status === activeEventFilter;
+        
+        return matchesSearch && matchesFilter;
+      });
+
+      if (filtered.length === 0) {
+        document.getElementById('noEventsMessage').classList.remove('hidden');
+        return;
+      } else {
+        document.getElementById('noEventsMessage').classList.add('hidden');
+      }
+
+      filtered.forEach(evt => {
+        const statusBadge = getStatusBadgeHTML(evt.status);
+        const venueText = evt.venueName ? evt.venueName : 'Sin Local';
+        
+        // --- 1. RENDERIZADO TABLE (DESKTOP) ---
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-900/30 transition-colors text-sm border-b border-slate-800/40";
+        tr.innerHTML = `
+          <td class="py-4 px-4">
+            <p class="font-semibold text-white font-mono text-xs">${evt.date}</p>
+            <p class="text-xs text-textMuted font-mono mt-0.5">${evt.startTime}</p>
+          </td>
+          <td class="py-4 px-4">
+            <p class="font-bold text-slate-100">${evt.title}</p>
+            <p class="text-xs text-textMuted mt-0.5">${evt.clientName}</p>
+          </td>
+          <td class="py-4 px-4 text-slate-300">
+            <span class="inline-flex items-center gap-1 text-xs">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-secondary"></i>
+              ${venueText}
+            </span>
+          </td>
+          <td class="py-4 px-4 text-right font-mono tabular-nums font-bold text-white">
+            $${evt.fee}
+          </td>
+          <td class="py-4 px-4">
+            ${statusBadge}
+          </td>
+          <td class="py-4 px-4 text-center">
+            <div class="flex items-center justify-center gap-1.5">
+              <button onclick="changeStatus('${evt.id}', 'confirmed')" title="Confirmar" class="p-1.5 bg-slate-900 hover:bg-emerald-950 hover:text-success text-slate-400 rounded transition-colors">
+                <i data-lucide="check" class="w-3.5 h-3.5"></i>
+              </button>
+              <button onclick="changeStatus('${evt.id}', 'pending')" title="Poner en espera" class="p-1.5 bg-slate-900 hover:bg-amber-950 hover:text-warning text-slate-400 rounded transition-colors">
+                <i data-lucide="alert-circle" class="w-3.5 h-3.5"></i>
+              </button>
+              <button onclick="deleteEvent('${evt.id}')" title="Eliminar" class="p-1.5 bg-slate-900 hover:bg-destructive/20 hover:text-destructive text-slate-400 rounded transition-colors">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </td>
+        `;
+        tableBody.appendChild(tr);
+
+        // --- 2. RENDERIZADO CARD (MOBILE) ---
+        const card = document.createElement('div');
+        card.className = "p-4 hover:bg-slate-900/20 transition-colors flex flex-col gap-3";
+        card.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div>
+              <h4 class="text-sm font-bold text-white">${evt.title}</h4>
+              <p class="text-xs text-textMuted mt-0.5">${evt.clientName}</p>
+            </div>
+            ${statusBadge}
+          </div>
+          
+          <div class="grid grid-cols-2 gap-2 text-xs bg-slate-950/40 p-2.5 rounded-lg border border-slate-900/60">
+            <div>
+              <p class="text-textMuted text-[10px]">LOCAL</p>
+              <p class="text-slate-200 mt-0.5 truncate">${venueText}</p>
+            </div>
+            <div>
+              <p class="text-textMuted text-[10px]">FECHA / HORA</p>
+              <p class="text-slate-200 font-mono mt-0.5">${evt.date} @ ${evt.startTime}</p>
+            </div>
+            <div>
+              <p class="text-textMuted text-[10px]">HONORARIOS (USD)</p>
+              <p class="text-slate-200 font-mono font-semibold mt-0.5">$${evt.fee}</p>
+            </div>
+            <div>
+              <p class="text-textMuted text-[10px]">DURACIÓN</p>
+              <p class="text-slate-200 font-mono mt-0.5">${evt.duration} Hs</p>
+            </div>
+          </div>
+
+          <div class="flex justify-between items-center gap-2">
+            <span class="text-[11px] text-textMuted truncate max-w-[140px] font-mono">${evt.notes || 'Sin requerimientos'}</span>
+            <div class="flex gap-1.5 shrink-0">
+              <button onclick="changeStatus('${evt.id}', 'confirmed')" class="px-2.5 py-1.5 bg-emerald-950/40 hover:bg-emerald-900 text-success text-xs font-semibold rounded transition-colors flex items-center gap-1">
+                <i data-lucide="check" class="w-3 h-3"></i> Confirmar
+              </button>
+              <button onclick="deleteEvent('${evt.id}')" class="p-1.5 bg-destructive/10 hover:bg-destructive/20 text-destructive rounded transition-colors">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+              </button>
+            </div>
+          </div>
+        `;
+        cardsContainer.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    /**
+     * Retorna el HTML de la etiqueta de estado sin píldoras planas, sino textos sofisticados o insignias muy discretas.
+     */
+    function getStatusBadgeHTML(status) {
+      if (status === 'confirmed' || status === 'completed') {
+        return `
+          <span class="inline-flex items-center gap-1.5 text-xs font-bold text-success">
+            <span class="h-1.5 w-1.5 rounded-full bg-success"></span>
+            Confirmado
+          </span>
+        `;
+      } else if (status === 'cancelled') {
+        return `
+          <span class="inline-flex items-center gap-1.5 text-xs font-bold text-destructive">
+            <span class="h-1.5 w-1.5 rounded-full bg-destructive"></span>
+            Cancelado
+          </span>
+        `;
+      } else {
+        return `
+          <span class="inline-flex items-center gap-1.5 text-xs font-bold text-warning">
+            <span class="h-1.5 w-1.5 rounded-full bg-warning"></span>
+            Pendiente
+          </span>
+        `;
+      }
+    }
+
+    /**
+     * Handler para cambios en filtros de eventos
+     */
+    function setEventFilter(filter) {
+      activeEventFilter = filter;
+      
+      // Estilos visuales de botones activos
+      document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.className = "filter-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 text-textMuted hover:text-white";
+      });
+      document.getElementById(`filter-${filter}`).className = "filter-btn px-3 py-1.5 text-xs font-semibold rounded-md transition-all duration-150 bg-slate-800 text-white shadow-sm";
+      
+      renderEventsList();
+    }
+
+    /**
+     * Gatilla la búsqueda de eventos
+     */
+    function filterEvents() {
+      renderEventsList();
+    }
+
+    /**
+     * Renderiza la lista de locales de DJ en la pestaña de Locales
+     */
+    function renderVenuesList() {
+      const container = document.getElementById('venuesListContainer');
+      container.innerHTML = '';
+
+      if (appData.venues.length === 0) {
+        container.innerHTML = `
+          <div class="py-12 text-center">
+            <i data-lucide="map" class="w-8 h-8 text-slate-700 mx-auto mb-2"></i>
+            <p class="text-xs text-textMuted">No tienes locales registrados aún. Agrega uno a la derecha.</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      appData.venues.forEach(ven => {
+        const div = document.createElement('div');
+        div.className = "p-4 hover:bg-slate-900/20 transition-all duration-150 border border-slate-800/60 rounded-xl bg-slate-950/20 flex flex-col md:flex-row justify-between items-start md:items-center gap-4";
+        
+        // Identificador visual por color
+        const themeColor = ven.colorTheme || '#06B6D4';
+        
+        div.innerHTML = `
+          <div class="flex items-start gap-3">
+            <span class="h-3.5 w-3.5 rounded-full mt-1.5 shrink-0 shadow-sm" style="background-color: ${themeColor}"></span>
+            <div>
+              <h4 class="text-base font-bold text-slate-200">${ven.name}</h4>
+              <p class="text-xs text-textMuted flex items-center gap-1 mt-1">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-slate-500"></i> ${ven.address || 'Sin dirección cargada'}
+              </p>
+              
+              <div class="flex flex-wrap gap-x-4 gap-y-1.5 mt-2 text-xs text-textMuted">
+                <span class="flex items-center gap-1"><i data-lucide="user" class="w-3 h-3"></i> ${ven.contactPerson || 'Sin contacto'}</span>
+                <span class="flex items-center gap-1"><i data-lucide="phone" class="w-3 h-3"></i> ${ven.phone || 'S/T'}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="text-right shrink-0 w-full md:w-auto border-t md:border-t-0 border-slate-900 pt-3 md:pt-0 flex md:flex-col justify-between items-center md:items-end gap-1">
+            <p class="text-xs text-textMuted">HONORARIOS BASE</p>
+            <p class="text-lg font-mono tabular-nums font-extrabold text-secondary">$${ven.defaultFee}</p>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+
+      lucide.createIcons();
+    }
+
+    /**
+     * Llena el combo box de locales al agregar un evento con los locales actuales
+     */
+    function populateVenuesDropdown() {
+      const select = document.getElementById('evtVenueSelect');
+      
+      // Mantener la primera opción
+      select.innerHTML = '<option value="">-- Seleccionar Local --</option>';
+      
+      appData.venues.forEach(ven => {
+        const option = document.createElement('option');
+        option.value = ven.id;
+        option.textContent = ven.name;
+        select.appendChild(option);
+      });
+    }
+
+    /**
+     * Cambia automáticamente el valor por defecto del presupuesto cuando el usuario cambia de local en el dropdown
+     */
+    function onVenueSelectChange() {
+      const select = document.getElementById('evtVenueSelect');
+      const selectedId = select.value;
+      if (!selectedId) return;
+
+      const venue = appData.venues.find(v => v.id === selectedId);
+      if (venue) {
+        document.getElementById('evtFee').value = venue.defaultFee || 0;
+      }
+    }
+
+    /**
+     * Ejecuta el submit del nuevo evento a Google Sheets
+     */
+    function handleEventSubmit(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submitEventBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Guardando en Google Sheets...";
+
+      const venueSelect = document.getElementById('evtVenueSelect');
+      const selectedVenueId = venueSelect.value;
+      const selectedVenueText = selectedVenueId ? venueSelect.options[venueSelect.selectedIndex].text : '';
+
+      const newEvent = {
+        title: document.getElementById('evtTitle').value,
+        clientName: document.getElementById('evtClientName').value,
+        venueId: selectedVenueId,
+        venueName: selectedVenueText,
+        date: document.getElementById('evtDate').value,
+        startTime: document.getElementById('evtStartTime').value,
+        duration: Number(document.getElementById('evtDuration').value) || 4,
+        status: document.getElementById('evtStatus').value,
+        fee: Number(document.getElementById('evtFee').value) || 0,
+        notes: document.getElementById('evtNotes').value
+      };
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Guardar Evento al Instante';
+            document.getElementById('addEventForm').reset();
+            showToast("✅ Evento Guardado", "El evento fue añadido instantáneamente a tu tabla de Google Sheets.", "success");
+            
+            // Recargar datos e ir al panel
+            refreshData();
+            switchTab('events');
+          })
+          .withFailureHandler((err) => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Guardar Evento al Instante';
+            onError("Error al guardar en Sheets: " + err.message);
+          })
+          .addEventFromPanel(newEvent);
+      } else {
+        // Local simulation
+        setTimeout(() => {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Guardar Evento al Instante';
+          
+          appData.events.unshift({
+            id: 'evt_' + Math.random().toString(36).substr(2, 9),
+            ...newEvent
+          });
+          appData.stats.totalEvents++;
+          appData.stats.totalEarnings += newEvent.fee;
+          
+          document.getElementById('addEventForm').reset();
+          showToast("✅ Evento Guardado (Simulado)", "Se ha guardado el evento en memoria local de prueba.", "success");
+          
+          onDataLoaded(appData);
+          switchTab('events');
+        }, 800);
+      }
+    }
+
+    /**
+     * Ejecuta el submit de un nuevo local
+     */
+    function handleVenueSubmit(e) {
+      e.preventDefault();
+      
+      const submitBtn = document.getElementById('submitVenueBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Registrando Local...";
+
+      const newVenue = {
+        name: document.getElementById('venName').value,
+        address: document.getElementById('venAddress').value,
+        contactPerson: document.getElementById('venContact').value,
+        phone: document.getElementById('venPhone').value,
+        email: document.getElementById('venEmail').value,
+        defaultFee: Number(document.getElementById('venDefaultFee').value) || 0,
+        colorTheme: document.getElementById('venColorTheme').value
+      };
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Registrar Local';
+            document.getElementById('addVenueForm').reset();
+            showToast("✅ Local Registrado", "El club/local fue cargado correctamente en la hoja.", "success");
+            
+            refreshData();
+          })
+          .withFailureHandler((err) => {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Registrar Local';
+            onError("Error al registrar local: " + err.message);
+          })
+          .addVenueFromPanel(newVenue);
+      } else {
+        // Simulated local
+        setTimeout(() => {
+          submitBtn.disabled = false;
+          submitBtn.innerHTML = '<i data-lucide="save" class="w-3.5 h-3.5"></i> Registrar Local';
+          
+          appData.venues.push({
+            id: 'ven_' + Math.random().toString(36).substr(2, 9),
+            ...newVenue
+          });
+          appData.stats.activeVenues++;
+          
+          document.getElementById('addVenueForm').reset();
+          showToast("✅ Local Registrado (Simulado)", "Se ha registrado el local en memoria de pruebas.", "success");
+          
+          onDataLoaded(appData);
+        }, 800);
+      }
+    }
+
+    /**
+     * Modifica el estado de un evento directamente
+     */
+    function changeStatus(eventId, newStatus) {
+      showToast("⏳ Actualizando Estado...", "Enviando comando de actualización a Google Sheets...", "warning");
+      
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            if (res.success) {
+              showToast("✅ Estado Actualizado", "El estado del evento cambió a " + newStatus + " correctamente.", "success");
+              refreshData();
+            } else {
+              onError(res.message);
+            }
+          })
+          .withFailureHandler((err) => {
+            onError("Error al modificar estado: " + err.message);
+          })
+          .updateEventStatusFromPanel(eventId, newStatus);
+      } else {
+        // Local simulation
+        const evt = appData.events.find(e => e.id === eventId);
+        if (evt) {
+          evt.status = newStatus;
+          showToast("✅ Estado Actualizado", "Actualizado en simulación.", "success");
+          onDataLoaded(appData);
+        }
+      }
+    }
+
+    /**
+     * Elimina un evento de la base de datos
+     */
+    function deleteEvent(eventId) {
+      if (!confirm("¿Estás completamente seguro de que deseas eliminar este evento de la hoja de cálculo? Esta acción no se puede deshacer.")) {
+        return;
+      }
+      
+      showToast("⏳ Eliminando...", "Solicitando remoción física del evento de la hoja...", "warning");
+      
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            if (res.success) {
+              showToast("🗑️ Evento Eliminado", "La fila del evento fue eliminada exitosamente.", "success");
+              refreshData();
+            } else {
+              onError(res.message);
+            }
+          })
+          .withFailureHandler((err) => {
+            onError("Error al eliminar fila: " + err.message);
+          })
+          .deleteEventFromPanel(eventId);
+      } else {
+        // Simulation
+        appData.events = appData.events.filter(e => e.id !== eventId);
+        showToast("🗑️ Evento Eliminado", "Removido de simulación.", "success");
+        onDataLoaded(appData);
+      }
+    }
+
+    /**
+     * Llama al setup para crear las tablas formateadas en Google Sheets
+     */
+    function runSetupSpreadsheet() {
+      const output = document.getElementById('diagnosticsOutput');
+      output.textContent = "⏳ Ejecutando inicialización física de tablas. Por favor, aguarda...";
+      output.className = "text-xs font-mono text-indigo-400 overflow-x-auto whitespace-pre-wrap";
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((res) => {
+            output.textContent = "✅ EXCELENTE:\n" + res.message;
+            output.className = "text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap";
+            showToast("✅ Base de Datos Creada", "Las hojas necesarias han sido formateadas con éxito.", "success");
+            refreshData();
+          })
+          .withFailureHandler((err) => {
+            output.textContent = "❌ ERROR:\n" + err.message;
+            output.className = "text-xs font-mono text-destructive overflow-x-auto whitespace-pre-wrap";
+          })
+          .setupSpreadsheet();
+      } else {
+        setTimeout(() => {
+          output.textContent = "✅ SIMULADO:\nLas hojas 'Events' y 'Venues' fueron creadas y formateadas con éxito en el entorno simulado de pruebas.";
+          output.className = "text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap";
+        }, 1000);
+      }
+    }
+
+    /**
+     * Ejecuta diagnósticos de las tablas
+     */
+    function runDiagnosticsCheck() {
+      const output = document.getElementById('diagnosticsOutput');
+      output.textContent = "⏳ Analizando ID de hoja y consistencia de tablas...";
+      output.className = "text-xs font-mono text-indigo-400 overflow-x-auto whitespace-pre-wrap";
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler((report) => {
+            output.textContent = report;
+            output.className = "text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap";
+          })
+          .withFailureHandler((err) => {
+            output.textContent = "❌ ERROR AL DIAGNOSTICAR:\n" + err.message;
+            output.className = "text-xs font-mono text-destructive overflow-x-auto whitespace-pre-wrap";
+          })
+          .checkDiagnostics();
+      } else {
+        setTimeout(() => {
+          output.textContent = "🔍 Reporte de Diagnóstico DJ Ledger (Simulado):\n\n• ID de Hoja: mock_sheet_id_dj_ledger\n• Hojas Disponibles: Events, Venues, Settings\n\n✅ Tabla 'Events': DETECTADA (3 filas de prueba)\n✅ Tabla 'Venues': DETECTADA (2 filas de prueba)";
+          output.className = "text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre-wrap";
+        }, 500);
+      }
+    }
+
+    /**
+     * Sistema de Toasts flotantes
+     */
+    function showToast(title, message, type = 'success') {
+      const toast = document.getElementById('toastNotification');
+      const iconContainer = document.getElementById('toastIconContainer');
+      const icon = document.getElementById('toastIcon');
+      
+      document.getElementById('toastTitle').textContent = title;
+      document.getElementById('toastMessage').textContent = message;
+
+      if (type === 'success') {
+        iconContainer.className = "p-1.5 bg-emerald-500/15 text-emerald-400 rounded-lg";
+        icon.setAttribute('data-lucide', 'check');
+      } else if (type === 'warning') {
+        iconContainer.className = "p-1.5 bg-amber-500/15 text-amber-400 rounded-lg";
+        icon.setAttribute('data-lucide', 'alert-triangle');
+      } else {
+        iconContainer.className = "p-1.5 bg-red-500/15 text-red-400 rounded-lg";
+        icon.setAttribute('data-lucide', 'shield-alert');
+      }
+
+      lucide.createIcons();
+
+      // Animación de entrada
+      toast.classList.remove('translate-y-10', 'opacity-0');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      // Ocultar automáticamente en 4.5 segundos
+      setTimeout(() => {
+        hideToast();
+      }, 4500);
+    }
+
+    function hideToast() {
+      const toast = document.getElementById('toastNotification');
+      toast.classList.remove('translate-y-0', 'opacity-100');
+      toast.classList.add('translate-y-10', 'opacity-0');
+    }
+
+    function onError(message) {
+      showToast("❌ Hubo un inconveniente", message, "error");
+    }
+
+    /**
+     * Generador de datos simulados para depuración local fuera de Google Apps Script
+     */
+    function getMockData() {
+      return {
+        events: [
+          {
+            id: 'evt_1',
+            title: 'Festival Sunset Electro Sessions',
+            clientName: 'Santiago Ruiz',
+            venueId: 'ven_1',
+            venueName: 'Club del Lago',
+            date: '2026-11-20',
+            startTime: '18:00',
+            duration: 6,
+            status: 'confirmed',
+            fee: 550,
+            notes: 'Llevar setup completo de iluminación y controladora Pioneer.'
+          },
+          {
+            id: 'evt_2',
+            title: 'Boda Boutique - DJ Set',
+            clientName: 'Martina & Facundo',
+            venueId: 'ven_2',
+            venueName: 'Estancia Las Margaritas',
+            date: '2026-12-05',
+            startTime: '21:00',
+            duration: 8,
+            status: 'pending',
+            fee: 800,
+            notes: 'Hacer playlist especial para recepción y vals tradicional.'
+          },
+          {
+            id: 'evt_3',
+            title: 'Pre-Party VIP Clubbing',
+            clientName: 'Hernán Castro',
+            venueId: 'ven_1',
+            venueName: 'Club del Lago',
+            date: '2026-10-10',
+            startTime: '22:00',
+            duration: 4,
+            status: 'completed',
+            fee: 400,
+            notes: 'Requerimientos técnicos listos por el organizador.'
+          }
+        ],
+        venues: [
+          {
+            id: 'ven_1',
+            name: 'Club del Lago',
+            address: 'Av. Costanera Norte 1200, Bariloche',
+            contactPerson: 'Esteban Altieri',
+            phone: '+54 294 456-7890',
+            email: 'contacto@clubdellago.com',
+            defaultFee: 500,
+            colorTheme: '#6366F1'
+          },
+          {
+            id: 'ven_2',
+            name: 'Estancia Las Margaritas',
+            address: 'Ruta Provincial 5, Km 22, Córdoba',
+            contactPerson: 'Liliana Solís',
+            phone: '+54 351 987-6543',
+            email: 'eventos@lasmargaritas.com.54',
+            defaultFee: 750,
+            colorTheme: '#06B6D4'
+          }
+        ],
+        stats: {
+          totalEvents: 3,
+          totalEarnings: 1750,
+          confirmedEvents: 2,
+          activeVenues: 2
+        }
+      };
+    }
+  </script>
+</body>
+</html>
