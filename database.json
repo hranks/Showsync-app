@@ -1,5 +1,7 @@
 {
   "events": [],
   "venues": [],
-  "userSettings": {}
+  "userSettings": {},
+  "registeredUsers": {},
+  "userData": {}
 }
