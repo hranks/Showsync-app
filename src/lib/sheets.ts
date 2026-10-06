@@ -115,6 +115,36 @@ export async function createSpreadsheet(accessToken: string): Promise<string> {
   return data.spreadsheetId;
 }
 
+// Find existing DJ Ledger spreadsheet in user's Google Drive or automatically provision one
+export async function findOrCreateUserSpreadsheet(accessToken: string, stageName?: string): Promise<{ spreadsheetId: string; isNew: boolean }> {
+  try {
+    // 1. Search in user's Google Drive
+    const searchRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+        "name contains 'DJ Ledger' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false"
+      )}&fields=files(id,name,createdTime)&orderBy=createdTime desc`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` }
+      }
+    );
+
+    if (searchRes.ok) {
+      const data = await searchRes.json();
+      if (data.files && data.files.length > 0) {
+        const existingSpreadsheetId = data.files[0].id;
+        await ensureRequiredSheets(accessToken, existingSpreadsheetId);
+        return { spreadsheetId: existingSpreadsheetId, isNew: false };
+      }
+    }
+  } catch (err) {
+    console.warn("Drive search error, falling back to createSpreadsheet:", err);
+  }
+
+  // 2. If not found, create new spreadsheet
+  const newSpreadsheetId = await createSpreadsheet(accessToken);
+  return { spreadsheetId: newSpreadsheetId, isNew: true };
+}
+
 // Ensure "Events" and "Venues" sheets exist in the spreadsheet, creating them if missing,
 // and delete any conflicting legacy "Eventos" and "Locales" sheets.
 export async function ensureRequiredSheets(accessToken: string, spreadsheetId: string): Promise<void> {

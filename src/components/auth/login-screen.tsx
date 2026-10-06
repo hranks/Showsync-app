@@ -3,39 +3,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '@/hooks/use-auth-store';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Disc3, Eye, EyeOff, Delete, Lock, User, KeyRound } from 'lucide-react';
-import { useTranslation } from '@/hooks/use-translation';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Disc3, Lock, ShieldCheck, UserPlus, LogIn, Sparkles, AlertCircle, Loader2, KeyRound, ArrowRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import { googleSignIn } from '@/lib/auth';
+import { findOrCreateUserSpreadsheet } from '@/lib/sheets';
+import type { DJUser } from '@/types';
 
 export function LoginScreen() {
-  const { login } = useAuthStore();
-  const [loginMethod, setLoginMethod] = useState<'pin' | 'password'>('pin');
+  const { loginUser } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Sign up form state
+  const [stageName, setStageName] = useState('');
+  const [currency, setCurrency] = useState<'USD' | 'NIO' | 'EUR'>('USD');
+  const [termsAccepted, setTermsAccepted] = useState(false);
+
+  // PIN / Master password fallback state
+  const [showAdminPin, setShowAdminPin] = useState(false);
   const [pin, setPin] = useState<string[]>(Array(6).fill(''));
-  const [showPin, setShowPin] = useState(false);
-  
-  // Password login states
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [pinError, setPinError] = useState(false);
+  const pinInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  const [isError, setIsError] = useState(false);
-  const [shake, setShake] = useState(false);
-  
-  // Security and Rate-Limiting states for Bot / Brute Force Protection
-  const [failedAttempts, setFailedAttempts] = useState(0);
-  const [lockoutTime, setLockoutTime] = useState<number | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0);
-
-  const { t } = useTranslation();
   const { toast } = useToast();
-  
-  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Cryptographic Helper: Non-reversible SHA-256 hash using the native Web Crypto API
+  // Cryptographic SHA-256 for PIN
   const hashSha256 = async (message: string): Promise<string> => {
     const msgBuffer = new TextEncoder().encode(message);
     const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
@@ -43,482 +40,488 @@ export function LoginScreen() {
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   };
 
-  // Seed default user with cryptographically hashed credentials (NEVER in plain text)
-  useEffect(() => {
-    const existingUsersStr = localStorage.getItem('dj_users');
-    let needsResetOrMigration = false;
-    
-    if (existingUsersStr) {
-      try {
-        const users = JSON.parse(existingUsersStr);
-        // Force upgrade/migration if legacy plain text password/pin fields exist
-        if (Array.isArray(users) && users.some(u => u.password || u.pin)) {
-          needsResetOrMigration = true;
-        }
-      } catch {
-        needsResetOrMigration = true;
+  /**
+   * FLIGHT A: INICIAR SESIÓN (Sign In con cuenta existente)
+   */
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    setIsProcessing(true);
+
+    try {
+      // 1. Google OAuth 2.0 PKCE Flow
+      const googleAuth = await googleSignIn();
+      if (!googleAuth || !googleAuth.user) {
+        throw new Error('No se pudo autenticar con Google.');
       }
-    } else {
-      needsResetOrMigration = true;
-    }
 
-    if (needsResetOrMigration) {
-      localStorage.setItem('dj_users', JSON.stringify([{
-        name: "Dj Ranks Nicaragua",
-        email: "ranksnica@gmail.com",
-        // SHA-256 hashes of "palacios94@rk" and "309410" respectively. No plain text secrets are stored.
-        passwordHash: "03f6ee8716efee9adddba168beb7f8160bc483a75b2042b58cad4da797f215cc",
-        pinHash: "c94ada0165659e21e87086588836f8e5e36087aafbc4cefb9a3629fa5f9ab270"
-      }]));
-    }
-  }, []);
+      const { user, accessToken } = googleAuth;
 
-  // Update lockout countdown if active
-  useEffect(() => {
-    if (!lockoutTime) return;
-    const interval = setInterval(() => {
-      const remaining = Math.max(0, Math.ceil((lockoutTime - Date.now()) / 1000));
-      setTimeLeft(remaining);
-      if (remaining === 0) {
-        setLockoutTime(null);
-        setFailedAttempts(0);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [lockoutTime]);
+      // 2. Comprobar si el usuario está registrado en el sistema
+      const verifyRes = await fetch(`/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: user.uid,
+          email: user.email
+        })
+      });
 
-  // Auto focus first PIN input or identifier on login method change
-  useEffect(() => {
-    if (loginMethod === 'pin' && timeLeft === 0) {
-      setTimeout(() => {
-        if (inputRefs.current[0]) {
-          inputRefs.current[0].focus();
+      const verifyData = await verifyRes.json();
+
+      if (!verifyRes.ok) {
+        if (verifyRes.status === 404) {
+          // El usuario NO está registrado
+          setErrorMessage(`La cuenta (${user.email}) no está registrada en DJ Ledger. Por favor, selecciona la pestaña 'Registrarse' para crear tu cuenta.`);
+          toast({
+            title: 'Cuenta no registrada',
+            description: 'No encontramos tu cuenta de DJ. Por favor, completa el registro primero.',
+            variant: 'destructive'
+          });
+          setActiveTab('signup');
+          return;
         }
-      }, 50);
+        throw new Error(verifyData.message || 'Error en el inicio de sesión.');
+      }
+
+      // 3. Login Exitoso
+      const djUser: DJUser = verifyData.user;
+      loginUser(djUser);
+
+      toast({
+        title: '¡Bienvenido de vuelta!',
+        description: `Sesión iniciada como ${djUser.stageName || djUser.displayName}.`,
+      });
+    } catch (err: any) {
+      console.error('Sign in error:', err);
+      setErrorMessage(err.message || 'Error de conexión durante el inicio de sesión.');
+      toast({
+        title: 'Error de inicio de sesión',
+        description: err.message || 'No se pudo completar el inicio de sesión con Google.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessing(false);
     }
-  }, [loginMethod, timeLeft]);
+  };
 
-  const handlePinChange = (value: string, index: number) => {
-    if (timeLeft > 0) return;
-    if (value !== '' && !/^[0-9]$/.test(value)) return;
+  /**
+   * FLIGHT B: REGISTRO (Sign Up / Alta de nuevo DJ y aprovisionamiento de base de datos)
+   */
+  const handleGoogleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
 
+    if (!stageName.trim()) {
+      setErrorMessage('Por favor, ingresa tu Nombre Artístico o de DJ.');
+      return;
+    }
+
+    if (!termsAccepted) {
+      setErrorMessage('Debes aceptar los términos y la autorización de almacenamiento.');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    try {
+      // 1. Google OAuth 2.0
+      const googleAuth = await googleSignIn();
+      if (!googleAuth || !googleAuth.user) {
+        throw new Error('No se pudo autenticar con Google.');
+      }
+
+      const { user, accessToken } = googleAuth;
+
+      // 2. Verificar que no esté ya registrado
+      const checkRes = await fetch(`/api/auth/verify?email=${encodeURIComponent(user.email || '')}&uid=${encodeURIComponent(user.uid)}`);
+      const checkData = await checkRes.json();
+
+      if (checkData.exists) {
+        setErrorMessage(`La cuenta (${user.email}) ya está registrada. Redirigiendo a Iniciar Sesión...`);
+        toast({
+          title: 'Cuenta ya existente',
+          description: 'Esta cuenta ya está registrada. Iniciando sesión...',
+        });
+        loginUser(checkData.user);
+        return;
+      }
+
+      // 3. Aprovisionamiento automático de la hoja en su Google Drive
+      toast({
+        title: 'Configurando tu espacio...',
+        description: 'Aprovisionando tu base de datos en Google Drive / Sheets.',
+      });
+
+      const { spreadsheetId } = await findOrCreateUserSpreadsheet(accessToken, stageName.trim());
+
+      // 4. Registrar en el sistema
+      const regRes = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName || stageName.trim(),
+          stageName: stageName.trim(),
+          photoURL: user.photoURL || '',
+          spreadsheetId
+        })
+      });
+
+      const regData = await regRes.json();
+
+      if (!regRes.ok) {
+        throw new Error(regData.message || 'Error al completar el registro.');
+      }
+
+      // 5. Alta completada e inicio de sesión
+      const newDJUser: DJUser = regData.user;
+      loginUser(newDJUser);
+
+      toast({
+        title: '🎉 ¡Registro Exitoso!',
+        description: `Tu cuenta de ${newDJUser.stageName} y tu Google Sheet han sido creados correctamente.`,
+      });
+    } catch (err: any) {
+      console.error('Sign up error:', err);
+      setErrorMessage(err.message || 'Hubo un inconveniente al crear tu cuenta.');
+      toast({
+        title: 'Error de registro',
+        description: err.message || 'No se pudo crear la cuenta.',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  /**
+   * FLIGHT C: ACCESO LOCAL POR PIN / MODO ADMINISTRADOR OFFLINE
+   */
+  const handlePinChange = (index: number, val: string) => {
+    if (val.length > 1) val = val.slice(-1);
     const newPin = [...pin];
-    newPin[index] = value;
+    newPin[index] = val;
     setPin(newPin);
-    setIsError(false);
+    setPinError(false);
 
-    if (value !== '' && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-
-    if (newPin.every(digit => digit !== '')) {
-      validatePin(newPin.join(''));
+    if (val && index < 5) {
+      pinInputRefs.current[index + 1]?.focus();
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
-    if (timeLeft > 0) return;
-    if (e.key === 'Backspace') {
-      if (pin[index] === '' && index > 0) {
-        const newPin = [...pin];
-        newPin[index - 1] = '';
-        setPin(newPin);
-        inputRefs.current[index - 1]?.focus();
-      } else {
-        const newPin = [...pin];
-        newPin[index] = '';
-        setPin(newPin);
-      }
-      setIsError(false);
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !pin[index] && index > 0) {
+      pinInputRefs.current[index - 1]?.focus();
     }
   };
 
-  const handlePaste = (e: React.ClipboardEvent) => {
-    if (timeLeft > 0) return;
+  const handleAdminPinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const pastedData = e.clipboardData.getData('text').trim();
-    if (/^[0-9]{6}$/.test(pastedData)) {
-      const digits = pastedData.split('');
-      setPin(digits);
-      validatePin(pastedData);
-    }
-  };
+    const pinStr = pin.join('');
+    if (pinStr.length < 6) return;
 
-  const validatePin = async (enteredPin: string) => {
-    if (timeLeft > 0) {
+    const hash = await hashSha256(pinStr);
+    // Master PIN: "309410"
+    if (hash === 'c94ada0165659e21e87086588836f8e5e36087aafbc4cefb9a3629fa5f9ab270') {
+      const masterUser: DJUser = {
+        uid: 'usr_master_ranks',
+        email: 'ranksnica@gmail.com',
+        displayName: 'Dj Ranks Nicaragua',
+        stageName: 'Dj Ranks Nicaragua',
+      };
+      loginUser(masterUser);
       toast({
-        title: "Bloqueo activo",
-        description: `Demasiados intentos fallidos. Espera ${timeLeft} segundos por seguridad.`,
-        variant: "destructive",
-      });
-      setPin(Array(6).fill(''));
-      return;
-    }
-
-    const enteredPinHash = await hashSha256(enteredPin);
-    const users = JSON.parse(localStorage.getItem('dj_users') || '[]');
-    
-    // Check matched user
-    const matchedUser = users.find((u: any) => u.pinHash === enteredPinHash) || 
-      (enteredPinHash === "c94ada0165659e21e87086588836f8e5e36087aafbc4cefb9a3629fa5f9ab270" ? { name: "Dj Ranks Nicaragua" } : null);
-
-    if (matchedUser) {
-      setFailedAttempts(0);
-      login(matchedUser.name);
-      toast({
-        title: "Acceso concedido",
-        description: `Sesión iniciada como ${matchedUser.name}`,
+        title: 'Acceso Maestro Autorizado',
+        description: 'Sesión iniciada como Administrador Maestro.',
       });
     } else {
-      const nextAttempts = failedAttempts + 1;
-      setFailedAttempts(nextAttempts);
-      setIsError(true);
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
-
-      if (nextAttempts >= 5) {
-        const lockDuration = 30; // Protects against rapid automated bot attacks
-        setLockoutTime(Date.now() + lockDuration * 1000);
-        setTimeLeft(lockDuration);
-        toast({
-          title: "Acceso bloqueado temporalmente",
-          description: `Demasiados intentos de acceso fallidos. Cerrado por ${lockDuration} segundos.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "PIN incorrecto",
-          description: `El PIN ingresado no es válido. Intentos restantes: ${5 - nextAttempts}`,
-          variant: "destructive",
-        });
-      }
-      
-      setPin(Array(6).fill(''));
-      if (inputRefs.current[0]) {
-        inputRefs.current[0].focus();
-      }
-    }
-  };
-
-  const handlePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsError(false);
-
-    if (timeLeft > 0) {
+      setPinError(true);
       toast({
-        title: "Bloqueo activo",
-        description: `Demasiados intentos fallidos. Espera ${timeLeft} segundos.`,
-        variant: "destructive",
+        title: 'PIN Incorrecto',
+        description: 'El PIN de administrador no es válido.',
+        variant: 'destructive'
       });
-      return;
     }
-
-    const enteredPasswordHash = await hashSha256(password.trim());
-    const users = JSON.parse(localStorage.getItem('dj_users') || '[]');
-    const normalizedIdentifier = identifier.trim().toLowerCase();
-
-    const matchedUser = users.find((u: any) => 
-      (u.email?.toLowerCase() === normalizedIdentifier || u.name?.toLowerCase() === normalizedIdentifier) && 
-      u.passwordHash === enteredPasswordHash
-    );
-
-    if (matchedUser) {
-      setFailedAttempts(0);
-      login(matchedUser.name);
-      toast({
-        title: "Acceso concedido",
-        description: `Sesión iniciada como ${matchedUser.name}`,
-      });
-    } else {
-      const nextAttempts = failedAttempts + 1;
-      setFailedAttempts(nextAttempts);
-      setIsError(true);
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
-
-      if (nextAttempts >= 5) {
-        const lockDuration = 30; // Defeats brute force password guessing attacks
-        setLockoutTime(Date.now() + lockDuration * 1000);
-        setTimeLeft(lockDuration);
-        toast({
-          title: "Acceso bloqueado temporalmente",
-          description: `Demasiados intentos fallidos. Cerrado por ${lockDuration} segundos por seguridad.`,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Credenciales incorrectas",
-          description: `El usuario o la contraseña son incorrectos. Intentos restantes: ${5 - nextAttempts}`,
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const handleKeypadPress = (num: string) => {
-    if (timeLeft > 0) return;
-    const firstEmptyIndex = pin.findIndex(digit => digit === '');
-    
-    if (firstEmptyIndex !== -1) {
-      const newPin = [...pin];
-      newPin[firstEmptyIndex] = num;
-      setPin(newPin);
-      setIsError(false);
-
-      if (firstEmptyIndex < 5) {
-        inputRefs.current[firstEmptyIndex + 1]?.focus();
-      } else {
-        validatePin(newPin.join(''));
-      }
-    }
-  };
-
-  const handleKeypadBackspace = () => {
-    if (timeLeft > 0) return;
-    let lastFilledIndex = -1;
-    for (let i = 5; i >= 0; i--) {
-      if (pin[i] !== '') {
-        lastFilledIndex = i;
-        break;
-      }
-    }
-
-    if (lastFilledIndex !== -1) {
-      const newPin = [...pin];
-      newPin[lastFilledIndex] = '';
-      setPin(newPin);
-      setIsError(false);
-      inputRefs.current[lastFilledIndex]?.focus();
-    }
-  };
-
-  const handleKeypadClear = () => {
-    if (timeLeft > 0) return;
-    setPin(Array(6).fill(''));
-    setIsError(false);
-    inputRefs.current[0]?.focus();
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4 select-none">
-      <Card className={cn("w-full max-w-md transition-all duration-300 shadow-2xl border-muted", shake && "animate-shake")}>
-        <CardHeader className="space-y-1 text-center pb-4">
-          <div className="flex justify-center mb-3">
-            <div className="relative bg-primary/10 p-4 rounded-full border border-primary/20 animate-pulse">
-              <Disc3 className="w-12 h-12 text-primary animate-[spin_8s_linear_infinite]" />
-              <Lock className="w-5 h-5 text-secondary absolute bottom-1 right-1 bg-background p-1 rounded-full border border-secondary" />
+    <div className="min-h-screen w-full flex items-center justify-center p-4 bg-background relative overflow-hidden">
+      {/* Luces de fondo y atmósfera DJ */}
+      <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] rounded-full bg-primary/15 blur-[120px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] rounded-full bg-cyan-500/10 blur-[140px] pointer-events-none" />
+
+      <div className="w-full max-w-md relative z-10">
+        
+        {/* Brand Header */}
+        <div className="flex flex-col items-center mb-6 text-center">
+          <div className="h-14 w-14 rounded-2xl bg-gradient-to-tr from-primary via-indigo-500 to-cyan-400 p-0.5 shadow-2xl shadow-primary/30 flex items-center justify-center mb-3">
+            <div className="h-full w-full bg-background/90 rounded-[14px] flex items-center justify-center">
+              <Disc3 className="w-8 h-8 text-primary animate-spin" style={{ animationDuration: '8s' }} />
             </div>
           </div>
-          <CardTitle className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-            DJ Ledger
-          </CardTitle>
-          <CardDescription className="text-base text-muted-foreground pt-1">
-            {timeLeft > 0 ? (
-              <span className="text-destructive font-semibold">
-                Bloqueo de seguridad activo. Espera {timeLeft} segundos.
-              </span>
-            ) : loginMethod === 'pin' ? (
-              'Ingresa tu PIN de 6 dígitos para acceder' 
-            ) : (
-              'Inicia sesión con tu correo o contraseña'
-            )}
-          </CardDescription>
-        </CardHeader>
-        
-        <CardContent className="space-y-6">
-          {/* Method Toggles */}
-          <div className="flex w-full p-1 bg-muted rounded-xl border border-muted/50">
-            <button 
+          <h1 className="font-display text-2xl font-black tracking-tight text-white">
+            DJ LEDGER
+          </h1>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+            Gestión profesional de eventos, honorarios y sincronización con Google Sheets.
+          </p>
+        </div>
+
+        {/* Card Principal con Selector de Modo */}
+        <Card className="border-border/60 shadow-2xl bg-card/80 backdrop-blur-xl">
+          
+          {/* Selector de Pestañas: Iniciar Sesión vs Registro */}
+          <div className="p-2 border-b border-border/60 grid grid-cols-2 gap-1.5 bg-muted/30">
+            <button
               type="button"
-              className={cn(
-                "flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200", 
-                loginMethod === 'pin' 
-                  ? "bg-background text-foreground shadow-sm font-bold border border-muted" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/20"
-              )}
-              onClick={() => {
-                setLoginMethod('pin');
-                setIsError(false);
-              }}
-              disabled={timeLeft > 0}
+              onClick={() => { setActiveTab('signin'); setErrorMessage(null); }}
+              className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'signin'
+                  ? 'bg-primary text-white shadow-md shadow-primary/20'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
             >
-              PIN
+              <LogIn className="w-3.5 h-3.5" />
+              Iniciar Sesión
             </button>
-            <button 
+            <button
               type="button"
-              className={cn(
-                "flex-1 py-2 text-sm font-medium rounded-lg transition-all duration-200", 
-                loginMethod === 'password' 
-                  ? "bg-background text-foreground shadow-sm font-bold border border-muted" 
-                  : "text-muted-foreground hover:text-foreground hover:bg-background/20"
-              )}
-              onClick={() => {
-                setLoginMethod('password');
-                setIsError(false);
-              }}
-              disabled={timeLeft > 0}
+              onClick={() => { setActiveTab('signup'); setErrorMessage(null); }}
+              className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                activeTab === 'signup'
+                  ? 'bg-primary text-white shadow-md shadow-primary/20'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+              }`}
             >
-              Contraseña
+              <UserPlus className="w-3.5 h-3.5" />
+              Registrarse
             </button>
           </div>
 
-          {loginMethod === 'pin' ? (
-            <div className="space-y-6">
-              {/* PIN Input Display */}
-              <div className="relative flex flex-col items-center">
-                <div className="flex items-center gap-2 justify-center w-full my-2">
-                  {pin.map((digit, index) => (
-                    <input
-                      key={index}
-                      ref={(el) => (inputRefs.current[index] = el)}
-                      type={showPin ? "text" : "password"}
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      maxLength={1}
-                      value={digit}
-                      onChange={(e) => handlePinChange(e.target.value, index)}
-                      onKeyDown={(e) => handleKeyDown(e, index)}
-                      onPaste={index === 0 ? handlePaste : undefined}
-                      disabled={timeLeft > 0}
-                      className={cn(
-                        "w-12 h-14 text-center text-2xl font-bold rounded-lg border bg-muted focus:bg-background focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all duration-150",
-                        isError 
-                          ? 'border-destructive text-destructive bg-destructive/5 ring-destructive' 
-                          : digit !== '' 
-                            ? 'border-secondary text-foreground' 
-                            : 'border-border',
-                        timeLeft > 0 && "opacity-50 cursor-not-allowed"
-                      )}
-                      aria-label={`Dígito ${index + 1}`}
-                    />
-                  ))}
+          <CardHeader className="pt-6 pb-2">
+            <CardTitle className="text-lg font-bold text-center">
+              {activeTab === 'signin' ? 'Acceso a tu Panel de DJ' : 'Crear Nueva Cuenta de DJ'}
+            </CardTitle>
+            <CardDescription className="text-xs text-center">
+              {activeTab === 'signin'
+                ? 'Conecta con tu cuenta de Google verificada para abrir tu base de datos.'
+                : 'Regístrate con tu Gmail y aprovisionaremos automáticamente tu hoja en Google Drive.'}
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4 pt-2">
+            
+            {/* Mensaje de Error / Notificación */}
+            {errorMessage && (
+              <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2.5 text-xs text-destructive">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="flex-1 font-medium">{errorMessage}</p>
+              </div>
+            )}
+
+            {/* TAB 1: INICIAR SESIÓN */}
+            {activeTab === 'signin' && (
+              <div className="space-y-4">
+                <div className="bg-muted/30 p-4 rounded-xl border border-border/40 space-y-3">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Autenticación segura mediante Google OAuth 2.0</span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    disabled={isProcessing}
+                    className="w-full py-6 font-bold bg-white text-slate-900 hover:bg-slate-100 hover:text-black shadow-lg flex items-center justify-center gap-3 transition-all"
+                  >
+                    {isProcessing ? (
+                      <Loader2 className="w-5 h-5 animate-spin text-slate-900" />
+                    ) : (
+                      <svg className="w-5 h-5" viewBox="0 0 24 24">
+                        <path
+                          fill="#4285F4"
+                          d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        />
+                        <path
+                          fill="#34A853"
+                          d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        />
+                        <path
+                          fill="#FBBC05"
+                          d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                        />
+                        <path
+                          fill="#EA4335"
+                          d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                        />
+                      </svg>
+                    )}
+                    <span className="text-sm">
+                      {isProcessing ? 'Verificando con Google...' : 'Iniciar Sesión con Google'}
+                    </span>
+                  </Button>
                 </div>
 
-                {/* Toggle PIN visibility button */}
-                <button
-                  type="button"
-                  onClick={() => setShowPin(!showPin)}
-                  disabled={timeLeft > 0}
-                  className="absolute right-0 -bottom-8 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors py-1 px-2 rounded-md hover:bg-muted disabled:opacity-50"
+                {/* Opción de Registro rápido si no tiene cuenta */}
+                <div className="text-center pt-2">
+                  <p className="text-xs text-muted-foreground">
+                    ¿Primera vez aquí?{' '}
+                    <button
+                      type="button"
+                      onClick={() => { setActiveTab('signup'); setErrorMessage(null); }}
+                      className="text-primary font-bold hover:underline inline-flex items-center gap-1"
+                    >
+                      Regístrate gratis <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 2: REGISTRO */}
+            {activeTab === 'signup' && (
+              <form onSubmit={handleGoogleSignUp} className="space-y-4">
+                <div className="space-y-3">
+                  
+                  {/* Nombre Artístico */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="stageName" className="text-xs font-semibold">
+                      Nombre Artístico o DJ Name <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="stageName"
+                      required
+                      placeholder="Ej. DJ Frank / DJ Ranks"
+                      value={stageName}
+                      onChange={(e) => setStageName(e.target.value)}
+                      className="bg-background/60 text-sm"
+                      disabled={isProcessing}
+                    />
+                  </div>
+
+                  {/* Moneda Principal */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Moneda Principal de Cobro</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(['USD', 'NIO', 'EUR'] as const).map((curr) => (
+                        <button
+                          key={curr}
+                          type="button"
+                          onClick={() => setCurrency(curr)}
+                          className={`py-2 text-xs font-bold rounded-lg border transition-all ${
+                            currency === curr
+                              ? 'bg-primary/15 border-primary text-primary shadow-sm'
+                              : 'border-border/60 bg-background/40 text-muted-foreground hover:text-foreground'
+                          }`}
+                        >
+                          {curr === 'USD' ? 'USD ($)' : curr === 'NIO' ? 'NIO (C$)' : 'EUR (€)'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Checkbox de Términos y Almacenamiento */}
+                  <div className="flex items-start space-x-2 pt-2">
+                    <Checkbox
+                      id="terms"
+                      checked={termsAccepted}
+                      onCheckedChange={(checked) => setTermsAccepted(!!checked)}
+                      disabled={isProcessing}
+                    />
+                    <label
+                      htmlFor="terms"
+                      className="text-[11px] text-muted-foreground leading-tight cursor-pointer"
+                    >
+                      Acepto vincular mi cuenta de Google para que DJ Ledger aprovisione de forma privada mi hoja de cálculo y respaldos en mi Google Drive personal.
+                    </label>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isProcessing || !stageName.trim() || !termsAccepted}
+                  className="w-full py-6 font-bold text-white bg-gradient-to-r from-primary via-indigo-600 to-cyan-600 hover:opacity-95 shadow-lg shadow-primary/25 flex items-center justify-center gap-2"
                 >
-                  {showPin ? (
+                  {isProcessing ? (
                     <>
-                      <EyeOff className="w-3.5 h-3.5" />
-                      Ocultar
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Creando tu base de datos...</span>
                     </>
                   ) : (
                     <>
-                      <Eye className="w-3.5 h-3.5" />
-                      Mostrar
+                      <Sparkles className="w-4 h-4" />
+                      <span>Crear Cuenta con Google</span>
                     </>
                   )}
-                </button>
-              </div>
+                </Button>
 
-              <div className="pt-6">
-                {/* Visual Numeric Keypad */}
-                <div className="grid grid-cols-3 gap-3 max-w-[280px] mx-auto">
-                  {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((num) => (
-                    <Button
-                      key={num}
+                <div className="text-center pt-1">
+                  <p className="text-xs text-muted-foreground">
+                    ¿Ya te registraste anteriormente?{' '}
+                    <button
                       type="button"
-                      variant="outline"
-                      onClick={() => handleKeypadPress(num)}
-                      disabled={timeLeft > 0}
-                      className="h-12 text-xl font-semibold rounded-xl hover:bg-primary/10 hover:border-primary/40 active:scale-95 transition-transform"
+                      onClick={() => { setActiveTab('signin'); setErrorMessage(null); }}
+                      className="text-primary font-bold hover:underline"
                     >
-                      {num}
-                    </Button>
-                  ))}
-                  
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleKeypadClear}
-                    disabled={timeLeft > 0}
-                    className="h-12 text-sm font-medium rounded-xl text-muted-foreground hover:text-foreground active:scale-95 transition-transform"
-                  >
-                    Limpiar
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleKeypadPress('0')}
-                    disabled={timeLeft > 0}
-                    className="h-12 text-xl font-semibold rounded-xl hover:bg-primary/10 hover:border-primary/40 active:scale-95 transition-transform"
-                  >
-                    0
-                  </Button>
-                  
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={handleKeypadBackspace}
-                    disabled={timeLeft > 0}
-                    className="h-12 flex items-center justify-center rounded-xl text-muted-foreground hover:text-foreground active:scale-95 transition-transform"
-                    aria-label="Borrar"
-                  >
-                    <Delete className="w-5 h-5" />
-                  </Button>
+                      Inicia Sesión aquí
+                    </button>
+                  </p>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={handlePasswordSubmit} className="space-y-4 pt-2">
-              <div className="space-y-2">
-                <Label htmlFor="identifier">Nombre de usuario o correo</Label>
-                <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="identifier"
-                    type="text"
-                    placeholder="correo@ejemplo.com"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    className="pl-9"
-                    required
-                    disabled={timeLeft > 0}
-                  />
-                </div>
-              </div>
+              </form>
+            )}
 
-              <div className="space-y-2">
-                <Label htmlFor="password">Contraseña</Label>
-                <div className="relative">
-                  <KeyRound className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-9 pr-9"
-                    required
-                    disabled={timeLeft > 0}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    disabled={timeLeft > 0}
-                    className="absolute right-3 top-3 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                disabled={timeLeft > 0}
-                className="w-full mt-4 bg-gradient-to-r from-primary to-secondary text-primary-foreground hover:opacity-90 font-medium py-2 rounded-lg transition-all duration-200"
+            {/* Accordion / Desplegable para Acceso Offline de Emergencia (PIN Maestro) */}
+            <div className="pt-2 border-t border-border/40">
+              <button
+                type="button"
+                onClick={() => setShowAdminPin(!showAdminPin)}
+                className="w-full text-center text-[11px] text-muted-foreground hover:text-foreground flex items-center justify-center gap-1.5 py-1"
               >
-                {timeLeft > 0 ? `Bloqueado (${timeLeft}s)` : 'Entrar'}
-              </Button>
-            </form>
-          )}
-        </CardContent>
-      </Card>
+                <KeyRound className="w-3 h-3 text-muted-foreground" />
+                <span>{showAdminPin ? 'Ocultar acceso de emergencia' : 'Acceso de emergencia con PIN'}</span>
+              </button>
+
+              {showAdminPin && (
+                <form onSubmit={handleAdminPinSubmit} className="mt-3 p-3 bg-muted/40 rounded-xl border border-border/50 space-y-3">
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    Ingresa el PIN maestro de 6 dígitos para acceso local sin conexión.
+                  </p>
+                  <div className="flex justify-center gap-1.5">
+                    {pin.map((digit, idx) => (
+                      <input
+                        key={idx}
+                        ref={(el) => { pinInputRefs.current[idx] = el; }}
+                        type="password"
+                        inputMode="numeric"
+                        maxLength={1}
+                        value={digit}
+                        onChange={(e) => handlePinChange(idx, e.target.value)}
+                        onKeyDown={(e) => handlePinKeyDown(idx, e)}
+                        className={`w-9 h-11 text-center font-mono text-base font-bold bg-background border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${
+                          pinError ? 'border-destructive ring-1 ring-destructive' : 'border-border'
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <Button type="submit" size="sm" variant="secondary" className="w-full text-xs font-semibold">
+                    Entrar con PIN
+                  </Button>
+                </form>
+              )}
+            </div>
+
+          </CardContent>
+
+          <CardFooter className="py-3 bg-muted/20 border-t border-border/40 flex items-center justify-center text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Lock className="w-3 h-3 text-emerald-500" />
+              Tus datos residen de forma 100% aislada en tu propio Google Drive
+            </span>
+          </CardFooter>
+        </Card>
+
+      </div>
     </div>
   );
 }

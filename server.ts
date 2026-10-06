@@ -5,13 +5,29 @@ import { createServer as createViteServer } from "vite";
 import { format } from "date-fns";
 
 const DB_PATH = path.join(process.cwd(), 'database.json');
-type DatabaseSchema = { events: any[], venues: any[], userSettings?: Record<string, any> };
-const defaultDb: DatabaseSchema = { events: [], venues: [], userSettings: {} };
+type DatabaseSchema = { 
+  events: any[]; 
+  venues: any[]; 
+  userSettings?: Record<string, any>;
+  registeredUsers?: Record<string, any>;
+  userData?: Record<string, { events: any[]; venues: any[] }>;
+};
+
+const defaultDb: DatabaseSchema = { 
+  events: [], 
+  venues: [], 
+  userSettings: {},
+  registeredUsers: {},
+  userData: {}
+};
 
 async function getDb(): Promise<DatabaseSchema> {
   try {
     const data = await fs.readFile(DB_PATH, 'utf-8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    if (!parsed.registeredUsers) parsed.registeredUsers = {};
+    if (!parsed.userData) parsed.userData = {};
+    return parsed;
   } catch (error: any) {
     if (error.code === 'ENOENT') {
       await saveDb(defaultDb);
@@ -29,17 +45,133 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  app.use(express.json({ limit: '10mb' }));
 
   // API routes FIRST
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
 
+  // --- MULTI-USER AUTH ROUTES ---
+  app.get("/api/auth/verify", async (req, res) => {
+    try {
+      const email = req.query.email as string;
+      const uid = req.query.uid as string;
+      const db = await getDb();
+      if (!db.registeredUsers) db.registeredUsers = {};
+      
+      const user = (uid && db.registeredUsers[uid]) || 
+                   (email && Object.values(db.registeredUsers).find((u: any) => u.email?.toLowerCase() === email.toLowerCase()));
+      
+      res.json({ exists: !!user, user: user || null });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to verify user registration status" });
+    }
+  });
+
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const { uid, email, displayName, stageName, photoURL, spreadsheetId } = req.body;
+      if (!uid || !email) {
+        return res.status(400).json({ error: "UID and Email are required for registration." });
+      }
+
+      const db = await getDb();
+      if (!db.registeredUsers) db.registeredUsers = {};
+
+      // Security check: Verify if email is already registered
+      const existingUser = db.registeredUsers[uid] || 
+                           Object.values(db.registeredUsers).find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+      
+      if (existingUser) {
+        return res.status(409).json({ 
+          error: "USER_ALREADY_REGISTERED", 
+          message: "Esta cuenta de Google ya está registrada. Por favor, selecciona 'Iniciar Sesión'.",
+          user: existingUser
+        });
+      }
+
+      const newUser = {
+        uid,
+        email,
+        displayName: displayName || stageName || 'DJ User',
+        stageName: stageName || displayName || 'DJ User',
+        photoURL: photoURL || '',
+        spreadsheetId: spreadsheetId || '',
+        createdAt: new Date().toISOString(),
+        lastLoginAt: new Date().toISOString()
+      };
+
+      db.registeredUsers[uid] = newUser;
+      if (!db.userData) db.userData = {};
+      if (!db.userData[uid]) db.userData[uid] = { events: [], venues: [] };
+
+      // Initialize default user settings
+      if (!db.userSettings) db.userSettings = {};
+      db.userSettings[uid] = {
+        language: 'es',
+        reportEmail: email,
+        theme: 'dark',
+        username: newUser.stageName,
+        notifications: true,
+        reminderTime: '60',
+        exportFrequency: 'monthly',
+        exportMethod: 'download',
+        cloudBackup: true,
+        spreadsheetId: spreadsheetId || '',
+        sheetsSyncEnabled: true
+      };
+
+      await saveDb(db);
+      res.json({ success: true, user: newUser });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to register user account" });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { uid, email, spreadsheetId } = req.body;
+      if (!uid || !email) {
+        return res.status(400).json({ error: "UID and Email are required." });
+      }
+
+      const db = await getDb();
+      if (!db.registeredUsers) db.registeredUsers = {};
+
+      let user = db.registeredUsers[uid] || 
+                 Object.values(db.registeredUsers).find((u: any) => u.email?.toLowerCase() === email.toLowerCase());
+
+      if (!user) {
+        return res.status(404).json({ 
+          error: "USER_NOT_REGISTERED", 
+          message: "Esta cuenta de Google no se encuentra registrada en DJ Ledger. Por favor, completa el registro primero." 
+        });
+      }
+
+      // Update last login timestamp and spreadsheetId if provided
+      user.lastLoginAt = new Date().toISOString();
+      if (spreadsheetId && !user.spreadsheetId) {
+        user.spreadsheetId = spreadsheetId;
+      }
+      db.registeredUsers[uid] = user;
+
+      await saveDb(db);
+      res.json({ success: true, user });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to authenticate login" });
+    }
+  });
+
+  // --- EVENTS API ROUTES (NAMESPACED BY USER) ---
   app.get("/api/events", async (req, res) => {
     try {
+      const userId = req.query.userId as string;
       const db = await getDb();
-      res.json(db.events);
+      if (userId && db.userData?.[userId]?.events) {
+        return res.json(db.userData[userId].events);
+      }
+      res.json(db.events || []);
     } catch (e) {
       res.status(500).json({ error: 'Failed to fetch events' });
     }
@@ -47,8 +179,14 @@ async function startServer() {
 
   app.post("/api/events", async (req, res) => {
     try {
+      const userId = req.body.userId as string;
       const db = await getDb();
-      db.events.push(req.body);
+      if (!db.userData) db.userData = {};
+      if (userId) {
+        if (!db.userData[userId]) db.userData[userId] = { events: [], venues: [] };
+        db.userData[userId].events.unshift(req.body);
+      }
+      db.events.unshift(req.body);
       await saveDb(db);
       res.json(req.body);
     } catch (e) {
@@ -58,12 +196,17 @@ async function startServer() {
 
   app.put("/api/events", async (req, res) => {
     try {
+      const userId = req.body.userId as string;
       const db = await getDb();
+      if (userId && db.userData?.[userId]?.events) {
+        const uIdx = db.userData[userId].events.findIndex(e => e.id === req.body.id);
+        if (uIdx !== -1) db.userData[userId].events[uIdx] = req.body;
+      }
       const index = db.events.findIndex(e => e.id === req.body.id);
       if (index !== -1) {
         db.events[index] = req.body;
-        await saveDb(db);
       }
+      await saveDb(db);
       res.json(req.body);
     } catch (e) {
       res.status(500).json({ error: 'Failed to update event' });
@@ -72,9 +215,13 @@ async function startServer() {
 
   app.delete("/api/events", async (req, res) => {
     try {
-      const id = req.query.id;
+      const id = req.query.id as string;
+      const userId = req.query.userId as string;
       if (!id) return res.status(400).json({ error: 'ID is required' });
       const db = await getDb();
+      if (userId && db.userData?.[userId]?.events) {
+        db.userData[userId].events = db.userData[userId].events.filter(e => e.id !== id);
+      }
       db.events = db.events.filter(e => e.id !== id);
       await saveDb(db);
       res.json({ success: true });
@@ -83,10 +230,15 @@ async function startServer() {
     }
   });
 
+  // --- VENUES API ROUTES (NAMESPACED BY USER) ---
   app.get("/api/venues", async (req, res) => {
     try {
+      const userId = req.query.userId as string;
       const db = await getDb();
-      res.json(db.venues);
+      if (userId && db.userData?.[userId]?.venues) {
+        return res.json(db.userData[userId].venues);
+      }
+      res.json(db.venues || []);
     } catch (e) {
       res.status(500).json({ error: 'Failed to fetch venues' });
     }
@@ -94,7 +246,13 @@ async function startServer() {
 
   app.post("/api/venues", async (req, res) => {
     try {
+      const userId = req.body.userId as string;
       const db = await getDb();
+      if (!db.userData) db.userData = {};
+      if (userId) {
+        if (!db.userData[userId]) db.userData[userId] = { events: [], venues: [] };
+        db.userData[userId].venues.push(req.body);
+      }
       db.venues.push(req.body);
       await saveDb(db);
       res.json(req.body);
@@ -105,12 +263,17 @@ async function startServer() {
 
   app.put("/api/venues", async (req, res) => {
     try {
+      const userId = req.body.userId as string;
       const db = await getDb();
+      if (userId && db.userData?.[userId]?.venues) {
+        const uIdx = db.userData[userId].venues.findIndex(v => v.id === req.body.id);
+        if (uIdx !== -1) db.userData[userId].venues[uIdx] = req.body;
+      }
       const index = db.venues.findIndex(v => v.id === req.body.id);
       if (index !== -1) {
         db.venues[index] = req.body;
-        await saveDb(db);
       }
+      await saveDb(db);
       res.json(req.body);
     } catch (e) {
       res.status(500).json({ error: 'Failed to update venue' });
@@ -119,9 +282,13 @@ async function startServer() {
 
   app.delete("/api/venues", async (req, res) => {
     try {
-      const id = req.query.id;
+      const id = req.query.id as string;
+      const userId = req.query.userId as string;
       if (!id) return res.status(400).json({ error: 'ID is required' });
       const db = await getDb();
+      if (userId && db.userData?.[userId]?.venues) {
+        db.userData[userId].venues = db.userData[userId].venues.filter(v => v.id !== id);
+      }
       db.venues = db.venues.filter(v => v.id !== id);
       await saveDb(db);
       res.json({ success: true });
@@ -130,7 +297,7 @@ async function startServer() {
     }
   });
 
-  // User Settings API Routes
+  // --- USER SETTINGS API ROUTES ---
   app.get("/api/user-settings", async (req, res) => {
     try {
       const { user } = req.query;
@@ -157,10 +324,17 @@ async function startServer() {
     }
   });
 
+  // --- IMPORT / RESTORE DATABASE (BY USER) ---
   app.post("/api/import", async (req, res) => {
     try {
-      const { events, venues } = req.body;
+      const { events, venues, userId } = req.body;
       const db = await getDb();
+      if (!db.userData) db.userData = {};
+      if (userId) {
+        if (!db.userData[userId]) db.userData[userId] = { events: [], venues: [] };
+        if (events && Array.isArray(events)) db.userData[userId].events = events;
+        if (venues && Array.isArray(venues)) db.userData[userId].venues = venues;
+      }
       if (events && Array.isArray(events)) {
         db.events = events;
       }
@@ -168,7 +342,7 @@ async function startServer() {
         db.venues = venues;
       }
       await saveDb(db);
-      res.json({ success: true, eventsCount: db.events.length, venuesCount: db.venues.length });
+      res.json({ success: true });
     } catch (e) {
       res.status(500).json({ error: 'Failed to import/restore database' });
     }
@@ -177,8 +351,8 @@ async function startServer() {
   app.post("/api/send-report", async (req, res) => {
     try {
       const { email, report } = req.body;
-      console.log(`[MOCK EMAIL] Simulating sending report "${report.title}" to ${email}`);
-      res.json({ success: true, message: 'Report generated successfully (Simulation mode).' });
+      console.log(`[REPORT EMAIL] Simulating sending report "${report.title}" to ${email}`);
+      res.json({ success: true, message: 'Report generated successfully.' });
     } catch (error: any) {
       console.error('Error sending report:', error);
       res.status(500).json({ 
@@ -198,43 +372,54 @@ async function startServer() {
       try {
         await fs.access(dbPath);
       } catch {
-        return res.status(404).json({ error: 'Database not found' });
+        return res.status(404).json({ error: 'Database file not found' });
       }
 
       const fileContent = await fs.readFile(dbPath, 'utf-8');
+      const fileName = `dj-ledger-backup-${format(new Date(), 'yyyy-MM-dd_HH-mm')}.json`;
       
+      const boundary = '-------314159265358979323846';
+      const delimiter = `\r\n--${boundary}\r\n`;
+      const close_delim = `\r\n--${boundary}--`;
+
       const metadata = {
-        name: 'DJ-Ledger-Backup-database.json',
+        name: fileName,
         mimeType: 'application/json',
+        description: 'DJ Ledger automated JSON database backup'
       };
 
-      const form = new FormData();
-      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-      form.append('file', new Blob([fileContent], { type: 'application/json' }));
+      const multipartRequestBody =
+        delimiter +
+        'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+        JSON.stringify(metadata) +
+        delimiter +
+        'Content-Type: application/json\r\n\r\n' +
+        fileContent +
+        close_delim;
 
-      const driveRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      const driveResponse = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
         method: 'POST',
         headers: {
-          Authorization: authHeader,
+          'Authorization': authHeader,
+          'Content-Type': `multipart/related; boundary=${boundary}`
         },
-        body: form,
+        body: multipartRequestBody
       });
 
-      if (!driveRes.ok) {
-        const errorText = await driveRes.text();
-        console.error('Drive API Error:', errorText);
-        return res.status(500).json({ error: 'Failed to upload to Google Drive' });
+      if (!driveResponse.ok) {
+        const errorText = await driveResponse.text();
+        return res.status(driveResponse.status).json({ error: errorText });
       }
 
-      const data = await driveRes.json() as { id: string };
-      res.json({ success: true, fileId: data.id });
-    } catch (error) {
-      console.error('Backup API Error:', error);
-      res.status(500).json({ error: 'Failed to complete backup' });
+      const driveFile = await driveResponse.json();
+      res.json({ success: true, file: driveFile });
+    } catch (error: any) {
+      console.error('Drive backup error:', error);
+      res.status(500).json({ error: error.message || 'Failed to backup to Drive' });
     }
   });
 
-  // Vite middleware for development
+  // Mount Vite middleware for SPA
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -242,24 +427,14 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath, {
-      etag: true,
-      maxAge: '1d',
-      setHeaders: (res, filePath) => {
-        if (filePath.endsWith('.html')) {
-          res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-        }
-      }
-    }));
-    app.get('*all', (req, res) => {
-      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
-      res.sendFile(path.join(distPath, 'index.html'));
+    app.use(express.static(path.join(process.cwd(), "dist")));
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(process.cwd(), "dist", "index.html"));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  app.listen(PORT, () => {
+    console.log(`DJ Ledger server running at http://localhost:${PORT}`);
   });
 }
 

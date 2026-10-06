@@ -1,5 +1,16 @@
 export type EventType = 'Club' | 'Corporate';
 
+export interface DJUser {
+  uid: string;
+  email: string;
+  displayName: string;
+  stageName: string;
+  photoURL?: string;
+  spreadsheetId?: string;
+  createdAt?: string;
+  lastLoginAt?: string;
+}
+
 export interface Venue {
   id?: string; // Add id for Firestore
   name: string;

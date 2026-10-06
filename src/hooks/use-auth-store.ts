@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import type { DJUser } from '@/types';
+import { logout as googleLogout } from '@/lib/auth';
 
-interface AuthState {
+export interface AuthState {
   isAuthenticated: boolean;
-  user: {
-    usernameOrEmail: string;
-  } | null;
+  user: DJUser | null;
 }
 
 export function useAuthStore() {
@@ -20,7 +20,21 @@ export function useAuthStore() {
     try {
       const storedAuth = localStorage.getItem('dj_auth');
       if (storedAuth) {
-        setAuthState(JSON.parse(storedAuth));
+        const parsed = JSON.parse(storedAuth);
+        if (parsed.isAuthenticated && parsed.user) {
+          const u = parsed.user;
+          const userObj: DJUser = {
+            uid: u.uid || 'usr_default',
+            email: u.email || u.usernameOrEmail || '',
+            displayName: u.displayName || u.name || 'DJ User',
+            stageName: u.stageName || u.name || 'DJ Ranks',
+            photoURL: u.photoURL || '',
+            spreadsheetId: u.spreadsheetId || ''
+          };
+          setAuthState({ isAuthenticated: true, user: userObj });
+        } else {
+          setAuthState({ isAuthenticated: false, user: null });
+        }
       } else {
         setAuthState({ isAuthenticated: false, user: null });
       }
@@ -40,7 +54,6 @@ export function useAuthStore() {
       }
     };
     
-    // Custom event for same-window updates
     const handleCustomChange = () => {
       loadAuth();
     };
@@ -53,17 +66,37 @@ export function useAuthStore() {
     };
   }, [loadAuth]);
 
+  const loginUser = useCallback((djUser: DJUser) => {
+    const newState = { isAuthenticated: true, user: djUser };
+    localStorage.setItem('dj_auth', JSON.stringify(newState));
+    localStorage.setItem('dj_last_active_user', djUser.uid);
+    window.dispatchEvent(new Event('dj_auth_change'));
+  }, []);
+
+  const logout = useCallback(async () => {
+    try {
+      await googleLogout();
+    } catch (e) {
+      console.warn("Google logout error:", e);
+    }
+    localStorage.removeItem('dj_auth');
+    localStorage.removeItem('google_access_token');
+    localStorage.removeItem('google_access_token_expiry');
+    localStorage.removeItem('google_user_profile');
+    setAuthState({ isAuthenticated: false, user: null });
+    window.dispatchEvent(new Event('dj_auth_change'));
+  }, []);
+
+  // Backward compatibility wrapper
   const login = useCallback((usernameOrEmail: string) => {
-    const newState = { isAuthenticated: true, user: { usernameOrEmail } };
-    localStorage.setItem('dj_auth', JSON.stringify(newState));
-    window.dispatchEvent(new Event('dj_auth_change'));
-  }, []);
+    const defaultUser: DJUser = {
+      uid: 'usr_default',
+      email: usernameOrEmail,
+      displayName: usernameOrEmail,
+      stageName: usernameOrEmail.split('@')[0] || 'DJ User'
+    };
+    loginUser(defaultUser);
+  }, [loginUser]);
 
-  const logout = useCallback(() => {
-    const newState = { isAuthenticated: false, user: null };
-    localStorage.setItem('dj_auth', JSON.stringify(newState));
-    window.dispatchEvent(new Event('dj_auth_change'));
-  }, []);
-
-  return { ...authState, login, logout, isInitialized };
+  return { ...authState, loginUser, login, logout, isInitialized };
 }

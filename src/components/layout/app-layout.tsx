@@ -22,7 +22,7 @@ import { fetchDataFromSheet } from '@/lib/sheets';
 import { useToast } from '@/hooks/use-toast';
 
 export function AppLayout() {
-  const { logout } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const { settings, isInitialized: settingsInitialized } = useSettingsStore();
   const { toast } = useToast();
   const autoRestoreAttempted = useRef(false);
@@ -109,9 +109,24 @@ export function AppLayout() {
           <SidebarContent>
             <SidebarNav />
           </SidebarContent>
-          <SidebarFooter className="p-4">
-            <Button variant="ghost" className="w-full justify-start text-muted-foreground" onClick={logout}>
-              <LogOut className="mr-2 h-4 w-4" />
+          <SidebarFooter className="p-3 border-t border-border/40 space-y-2">
+            {user && (
+              <div className="flex items-center gap-2.5 p-2 bg-muted/30 rounded-lg">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt="Avatar" className="w-8 h-8 rounded-full border border-primary/30" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-primary/10 text-primary font-bold flex items-center justify-center text-xs">
+                    {user.stageName ? user.stageName[0].toUpperCase() : 'D'}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold truncate text-foreground">{user.stageName || user.displayName}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+                </div>
+              </div>
+            )}
+            <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground hover:text-destructive text-xs" onClick={logout}>
+              <LogOut className="mr-2 h-3.5 w-3.5" />
               Cerrar sesión
             </Button>
           </SidebarFooter>
