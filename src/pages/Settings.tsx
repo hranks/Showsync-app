@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/types';
 import { useTranslation } from '@/hooks/use-translation';
 import { sendReport } from '@/ai/flows/send-report-flow';
-import { initAuth, googleSignIn, getAccessToken, logout, clearGoogleToken } from '@/lib/auth';
+import { initAuth, googleSignIn, getAccessToken, logout, clearGoogleToken, getStoredGoogleUser, type StoredGoogleUser } from '@/lib/auth';
 import type { User } from 'firebase/auth';
 import { createSpreadsheet, syncDataToSheet, fetchDataFromSheet } from '@/lib/sheets';
 import { useEvents } from '@/hooks/use-events-store';
@@ -32,7 +32,7 @@ export default function SettingsPage() {
 
   const [needsAuth, setNeedsAuth] = useState(false);
   const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<User | StoredGoogleUser | null>(() => getStoredGoogleUser());
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
@@ -78,6 +78,22 @@ export default function SettingsPage() {
     } finally {
       setIsLoggingIn(false);
     }
+  };
+
+  const handleDisconnectGoogle = () => {
+    clearGoogleToken();
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('google_user_profile');
+    }
+    setUser(null);
+    setToken(null);
+    setNeedsAuth(true);
+    toast({
+      title: localSettings.language === 'es' ? 'Sesión de Google Desvinculada' : 'Google Session Disconnected',
+      description: localSettings.language === 'es'
+        ? 'Se ha desvinculado la sesión de Google. Tus datos locales se mantienen intactos.'
+        : 'Google session has been disconnected. Your local data remains intact.'
+    });
   };
 
   const ensureToken = async (): Promise<string | null> => {
@@ -639,40 +655,50 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-6">
               {user && !needsAuth ? (
-                <div className="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/20 rounded-lg text-sm flex-col sm:flex-row gap-3">
+                <div className="flex items-center justify-between p-3.5 bg-green-500/10 border border-green-500/20 rounded-lg text-sm flex-col sm:flex-row gap-3">
                   <div className="flex items-center gap-3">
                     {user.photoURL ? (
-                      <img src={user.photoURL} referrerPolicy="no-referrer" alt="Google Avatar" className="h-8 w-8 rounded-full" />
+                      <img src={user.photoURL} referrerPolicy="no-referrer" alt="Google Avatar" className="h-9 w-9 rounded-full border border-green-500/30" />
                     ) : (
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center font-bold">
+                      <div className="h-9 w-9 rounded-full bg-primary/10 flex items-center justify-center font-bold">
                         {user.displayName ? user.displayName[0] : 'U'}
                       </div>
                     )}
                     <div>
-                      <p className="font-medium">{user.displayName || 'Google User'}</p>
+                      <p className="font-medium text-foreground">{user.displayName || 'Google User'}</p>
                       <p className="text-xs text-muted-foreground">{user.email}</p>
                     </div>
                   </div>
-                  <span className="inline-flex items-center rounded-md border px-2.5 py-0.5 text-xs font-semibold bg-green-500/10 text-green-500 border-green-500/20 gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
-                    {localSettings.language === 'es' ? 'Conectado' : 'Connected'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-md border px-2.5 py-1 text-xs font-semibold bg-green-500/10 text-green-500 border-green-500/20 gap-1.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                      {localSettings.language === 'es' ? 'Conectado a Google' : 'Connected to Google'}
+                    </span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={handleDisconnectGoogle}
+                      className="text-xs text-muted-foreground hover:text-destructive h-8 px-2"
+                    >
+                      {localSettings.language === 'es' ? 'Desconectar' : 'Disconnect'}
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg gap-4 text-sm">
+                <div className="flex flex-col sm:flex-row items-center justify-between p-4 bg-muted/40 border border-border rounded-lg gap-4 text-sm">
                   <div className="space-y-1 text-center sm:text-left">
-                    <p className="font-semibold text-amber-800 dark:text-amber-400">
-                      {localSettings.language === 'es' ? 'Sincronización Activa (Google Desconectado)' : 'Active Sync (Google Offline)'}
+                    <p className="font-semibold text-foreground">
+                      {localSettings.language === 'es' ? 'Cuenta de Google (Opcional)' : 'Google Account (Optional)'}
                     </p>
                     <p className="text-xs text-muted-foreground max-w-md">
                       {localSettings.language === 'es' 
-                        ? 'Tu base de datos está vinculada. Inicia sesión con Google para permitir sincronización y respaldos automáticos en tiempo real.'
-                        : 'Your database remains linked. Please sign in with Google to enable real-time updates and automated backups.'}
+                        ? 'Conecta tu cuenta de Google si deseas habilitar la sincronización directa con Google Sheets y respaldos en Drive.'
+                        : 'Connect your Google account if you wish to enable direct sync with Google Sheets and Drive backups.'}
                     </p>
                   </div>
-                  <Button variant="outline" size="sm" onClick={handleLogin} disabled={isLoggingIn} className="border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-300">
-                    {isLoggingIn ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Cloud className="mr-2 h-4 w-4 text-amber-500" />}
-                    {localSettings.language === 'es' ? 'Vincular Cuenta' : 'Link Account'}
+                  <Button variant="outline" size="sm" onClick={handleLogin} disabled={isLoggingIn} className="gap-2 shrink-0">
+                    {isLoggingIn ? <Loader2 className="h-4 w-4 animate-spin" /> : <Cloud className="h-4 w-4 text-primary" />}
+                    {localSettings.language === 'es' ? 'Vincular Cuenta de Google' : 'Link Google Account'}
                   </Button>
                 </div>
               )}

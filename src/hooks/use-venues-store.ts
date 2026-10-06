@@ -16,15 +16,7 @@ export function useVenues() {
   const triggerSync = useCallback(async (updatedVenues: Venue[]) => {
     const token = await getAccessToken();
     if (!token) {
-      if (settings.sheetsSyncEnabled && settings.spreadsheetId) {
-        toast({
-          title: settings.language === 'es' ? 'Sincronización en Pausa' : 'Sync Paused',
-          description: settings.language === 'es' 
-            ? 'Por favor, reconecta tu cuenta de Google en la sección de Configuración para sincronizar los cambios.' 
-            : 'Please reconnect your Google account in Settings to sync changes.',
-          variant: 'destructive',
-        });
-      }
+      console.log('Google Auth token not active; venues safely saved in local database.');
       return;
     }
     try {

@@ -17,15 +17,7 @@ export function useEvents() {
   const triggerSync = useCallback(async (updatedEvents: Event[]) => {
     const token = await getAccessToken();
     if (!token) {
-      if (settings.sheetsSyncEnabled && settings.spreadsheetId) {
-        toast({
-          title: settings.language === 'es' ? 'Sincronización en Pausa' : 'Sync Paused',
-          description: settings.language === 'es' 
-            ? 'Por favor, reconecta tu cuenta de Google en la sección de Configuración para sincronizar los cambios.' 
-            : 'Please reconnect your Google account in Settings to sync changes.',
-          variant: 'destructive',
-        });
-      }
+      console.log('Google Auth token not active; events safely saved in local database.');
       return;
     }
     try {
@@ -120,13 +112,7 @@ export function useEvents() {
   const pullFromSheets = useCallback(async () => {
     const token = await getAccessToken();
     if (!token) {
-      toast({
-        title: settings.language === 'es' ? 'Inicio de Sesión Requerido' : 'Authentication Required',
-        description: settings.language === 'es'
-          ? 'Por favor, inicia sesión con Google en Configuración para importar datos.'
-          : 'Please sign in with Google in Settings to import data.',
-        variant: 'destructive',
-      });
+      console.log('No Google Auth token active, skipping automatic pull.');
       return false;
     }
     if (!settings.spreadsheetId) return false;
