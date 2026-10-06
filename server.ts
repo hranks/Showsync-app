@@ -48,9 +48,24 @@ async function saveDb(data: DatabaseSchema): Promise<void> {
   }
 }
 
+function getPort(): number {
+  const args = process.argv.slice(2);
+  const portArgIdx = args.findIndex(a => a === '--port' || a === '-p');
+  if (portArgIdx !== -1 && args[portArgIdx + 1]) {
+    const p = parseInt(args[portArgIdx + 1], 10);
+    if (!isNaN(p)) return p;
+  }
+  const inlinePort = args.find(a => a.startsWith('--port='));
+  if (inlinePort) {
+    const p = parseInt(inlinePort.split('=')[1], 10);
+    if (!isNaN(p)) return p;
+  }
+  return process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+}
+
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+  const PORT = getPort();
 
   app.use(express.json({ limit: '10mb' }));
 
@@ -484,9 +499,26 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+
+    app.use(async (req, res, next) => {
+      if (req.originalUrl.startsWith("/api")) {
+        return next();
+      }
+      try {
+        const url = req.originalUrl;
+        let template = await fs.readFile(path.resolve(process.cwd(), "index.html"), "utf-8");
+        template = await vite.transformIndexHtml(url, template);
+        res.status(200).set({ "Content-Type": "text/html" }).end(template);
+      } catch (e: any) {
+        if (vite.ssrFixStacktrace) {
+          vite.ssrFixStacktrace(e);
+        }
+        next(e);
+      }
+    });
   } else {
     app.use(express.static(path.join(process.cwd(), "dist")));
-    app.get("*", (req, res) => {
+    app.use((req, res) => {
       res.sendFile(path.join(process.cwd(), "dist", "index.html"));
     });
   }
