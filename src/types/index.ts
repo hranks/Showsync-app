@@ -5,6 +5,7 @@ export interface DJUser {
   email: string;
   displayName: string;
   stageName: string;
+  pinHash?: string;
   photoURL?: string;
   spreadsheetId?: string;
   createdAt?: string;

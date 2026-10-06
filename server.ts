@@ -96,6 +96,7 @@ async function startServer() {
         email,
         displayName: displayName || stageName || 'DJ User',
         stageName: stageName || displayName || 'DJ User',
+        pinHash: req.body.pinHash || '',
         photoURL: photoURL || '',
         spreadsheetId: spreadsheetId || '',
         createdAt: new Date().toISOString(),
@@ -160,6 +161,56 @@ async function startServer() {
       res.json({ success: true, user });
     } catch (e) {
       res.status(500).json({ error: "Failed to authenticate login" });
+    }
+  });
+
+  app.post("/api/auth/pin-login", async (req, res) => {
+    try {
+      const { pin, pinHash, emailOrStageName } = req.body;
+      if (!pin && !pinHash) {
+        return res.status(400).json({ error: "PIN is required." });
+      }
+
+      // Check Master PIN (309410 or SHA-256 c94ada0165659e21e87086588836f8e5e36087aafbc4cefb9a3629fa5f9ab270)
+      if (pin === '309410' || pinHash === 'c94ada0165659e21e87086588836f8e5e36087aafbc4cefb9a3629fa5f9ab270') {
+        const masterUser = {
+          uid: 'usr_master_ranks',
+          email: 'ranksnica@gmail.com',
+          displayName: 'Dj Ranks Nicaragua',
+          stageName: 'Dj Ranks Nicaragua',
+          lastLoginAt: new Date().toISOString()
+        };
+        return res.json({ success: true, user: masterUser });
+      }
+
+      const db = await getDb();
+      const users = Object.values(db.registeredUsers || {}) as any[];
+
+      // Match by pinHash
+      let matchedUser = users.find((u: any) => u.pinHash && u.pinHash === pinHash);
+
+      if (!matchedUser && emailOrStageName) {
+        const query = emailOrStageName.toLowerCase();
+        matchedUser = users.find((u: any) => 
+          (u.email?.toLowerCase() === query || u.stageName?.toLowerCase() === query) &&
+          u.pinHash === pinHash
+        );
+      }
+
+      if (!matchedUser) {
+        return res.status(401).json({ 
+          error: "INVALID_PIN", 
+          message: "PIN incorrecto o usuario no encontrado." 
+        });
+      }
+
+      matchedUser.lastLoginAt = new Date().toISOString();
+      db.registeredUsers[matchedUser.uid] = matchedUser;
+      await saveDb(db);
+
+      res.json({ success: true, user: matchedUser });
+    } catch (e) {
+      res.status(500).json({ error: "Failed to authenticate PIN login" });
     }
   });
 

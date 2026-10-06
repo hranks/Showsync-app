@@ -186,6 +186,16 @@ export async function ensureRequiredSheets(accessToken: string, spreadsheetId: s
       }
     });
   }
+  if (!existingTitles.includes('Profile')) {
+    addRequests.push({
+      addSheet: {
+        properties: {
+          title: 'Profile',
+          gridProperties: { frozenRowCount: 1 }
+        }
+      }
+    });
+  }
 
   // Execute add requests first if needed
   if (addRequests.length > 0) {
@@ -603,3 +613,71 @@ export async function fetchDataFromSheet(
     return null;
   }
 }
+
+// Helper to save user profile and security credentials to the user's Google Sheet
+export async function saveUserProfileToSheet(
+  accessToken: string,
+  spreadsheetId: string,
+  profile: {
+    uid: string;
+    email: string;
+    displayName: string;
+    stageName: string;
+    pinHash?: string;
+    createdAt?: string;
+  }
+): Promise<void> {
+  try {
+    await ensureRequiredSheets(accessToken, spreadsheetId);
+    const rows = [
+      ['Property', 'Value', 'Last Updated'],
+      ['DJ_STAGE_NAME', profile.stageName || '', new Date().toISOString()],
+      ['DISPLAY_NAME', profile.displayName || '', new Date().toISOString()],
+      ['ACCOUNT_EMAIL', profile.email || '', new Date().toISOString()],
+      ['ACCOUNT_UID', profile.uid || '', new Date().toISOString()],
+      ['SECURITY_PIN_HASH', profile.pinHash || '', new Date().toISOString()],
+      ['REGISTERED_AT', profile.createdAt || new Date().toISOString(), new Date().toISOString()],
+      ['APP_NAME', 'DJ Ledger Pro', new Date().toISOString()]
+    ];
+
+    await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Profile!A1:C8?valueInputOption=USER_ENTERED`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ values: rows })
+      }
+    );
+  } catch (err) {
+    console.warn('Could not save user profile to Google Sheet:', err);
+  }
+}
+
+// Helper to fetch user profile from the user's Google Sheet
+export async function fetchUserProfileFromSheet(
+  accessToken: string,
+  spreadsheetId: string
+): Promise<Record<string, string> | null> {
+  try {
+    const res = await fetch(
+      `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/Profile!A1:C8`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.values || data.values.length <= 1) return null;
+    const result: Record<string, string> = {};
+    for (let i = 1; i < data.values.length; i++) {
+      const [k, v] = data.values[i];
+      if (k) result[k] = v || '';
+    }
+    return result;
+  } catch (err) {
+    console.warn('Could not fetch user profile from Google Sheet:', err);
+    return null;
+  }
+}
+
