@@ -18,6 +18,8 @@ function SessionTimeoutManager() {
   const { isAuthenticated, logout } = useAuthStore();
   const { toast } = useToast();
   const timeoutRef = useRef<any>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos de inactividad
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -27,45 +29,70 @@ function SessionTimeoutManager() {
       return;
     }
 
-    const resetTimer = () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      // 5 minutes of inactivity: 5 * 60 * 1000 = 300,000 ms
-      timeoutRef.current = setTimeout(() => {
+    const checkInactivity = () => {
+      const now = Date.now();
+      const elapsed = now - lastActivityRef.current;
+      if (elapsed >= TIMEOUT_MS) {
         logout();
         toast({
           title: "Sesión expirada",
           description: "Tu sesión ha cerrado automáticamente por inactividad de 5 minutos.",
           variant: "destructive"
         });
-      }, 5 * 60 * 1000);
+      } else {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(checkInactivity, Math.max(1000, TIMEOUT_MS - elapsed));
+      }
+    };
+
+    const recordActivity = () => {
+      lastActivityRef.current = Date.now();
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+      timeoutRef.current = setTimeout(checkInactivity, TIMEOUT_MS);
     };
 
     // Initialize timer on load
-    resetTimer();
+    recordActivity();
 
-    // Setup event listeners for user activity
+    // Comprobar inactividad al volver del segundo plano / desbloquear el móvil
+    const handleVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkInactivity();
+      }
+    };
+
+    // Setup event listeners for user activity (incluyendo gestos táctiles móviles)
     const activityEvents = [
       'mousedown',
       'mousemove',
-      'keypress',
+      'keydown',
       'scroll',
       'touchstart',
+      'touchmove',
+      'pointerdown',
       'click'
     ];
 
     activityEvents.forEach(event => {
-      window.addEventListener(event, resetTimer);
+      window.addEventListener(event, recordActivity, { passive: true });
     });
+
+    document.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('pageshow', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
 
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
       activityEvents.forEach(event => {
-        window.removeEventListener(event, resetTimer);
+        window.removeEventListener(event, recordActivity);
       });
+      document.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('pageshow', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
     };
   }, [isAuthenticated, logout, toast]);
 
