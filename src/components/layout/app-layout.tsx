@@ -16,7 +16,7 @@ import { SidebarNav } from './sidebar-nav';
 import { DiscAlbum, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/hooks/use-auth-store';
-import { getAccessToken } from '@/lib/auth';
+import { getAccessToken, authFetch } from '@/lib/auth';
 import { useSettingsStore } from '@/hooks/use-settings-store';
 import { fetchDataFromSheet } from '@/lib/sheets';
 import { useToast } from '@/hooks/use-toast';
@@ -33,10 +33,9 @@ export function AppLayout() {
 
     async function checkAndAutoRestore() {
       try {
-        // 1. Check if local database is empty
         const [eventsRes, venuesRes] = await Promise.all([
-          fetch('/api/events'),
-          fetch('/api/venues')
+          authFetch('/api/events'),
+          authFetch('/api/venues')
         ]);
 
         if (!eventsRes.ok || !venuesRes.ok) return;
@@ -44,13 +43,9 @@ export function AppLayout() {
         const events = await eventsRes.json();
         const venues = await venuesRes.json();
 
-        // If BOTH are completely empty, we restore from Google Sheets
         if (events.length === 0 && venues.length === 0) {
-          console.log("Local database is empty. Attempting auto-restore from linked Google Sheet...");
-          
           const token = await getAccessToken();
           if (!token) {
-            console.log("No Google Auth token available for auto-restore.");
             return;
           }
 
@@ -58,8 +53,7 @@ export function AppLayout() {
 
           const data = await fetchDataFromSheet(token, settings.spreadsheetId!);
           if (data && (data.events.length > 0 || data.venues.length > 0)) {
-            // Overwrite server database
-            const response = await fetch('/api/import', {
+            const response = await authFetch('/api/import', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -72,29 +66,25 @@ export function AppLayout() {
             });
 
             if (response.ok) {
-              console.log("Auto-restore successful!");
               toast({
                 title: settings.language === 'es' ? 'Datos Recuperados' : 'Data Recovered',
-                description: settings.language === 'es' 
+                description: settings.language === 'es'
                   ? `Se restauraron automáticamente ${data.events.length} eventos y ${data.venues.length} locales desde Google Sheets.`
                   : `Successfully auto-restored ${data.events.length} events and ${data.venues.length} venues from Google Sheets.`,
               });
-              // Reload page to update UI stores
-              setTimeout(() => {
-                window.location.reload();
-              }, 1000);
+              window.dispatchEvent(new Event('dj_data_refresh'));
             }
           }
         } else {
           autoRestoreAttempted.current = true;
         }
       } catch (err) {
-        console.error("Auto-restore check failed:", err);
+        console.error('Auto-restore check failed:', err);
       }
     }
 
     checkAndAutoRestore();
-  }, [settings, settingsInitialized, toast]);
+  }, [settings.spreadsheetId, settings.language, settingsInitialized, toast]);
   
   return (
     <SidebarProvider defaultOpen>

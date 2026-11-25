@@ -28,17 +28,17 @@ import { useVenues } from '@/hooks/use-venues-store';
 
 const formSchema = z.object({
   venueName: z.string().min(1, 'Venue name is required.'),
-  isPredefinedVenue: z.boolean().default(false),
+  isPredefinedVenue: z.boolean(),
   eventType: z.enum(['Club', 'Corporate']),
-  date: z.date({ required_error: 'Date is required.' }),
+  date: z.date({ error: 'Date is required.' }),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
-  totalEarnings: z.coerce.number().min(0),
+  totalEarnings: z.number().min(0),
   notes: z.string().optional(),
-  paymentAdvanceNIO: z.coerce.number().optional(),
-  paymentAdvanceUSD: z.coerce.number().optional(),
-  consumptionsNIO: z.coerce.number().optional(),
-  consumptionsUSD: z.coerce.number().optional(),
+  paymentAdvanceNIO: z.number().optional(),
+  paymentAdvanceUSD: z.number().optional(),
+  consumptionsNIO: z.number().optional(),
+  consumptionsUSD: z.number().optional(),
 });
 
 type AddEventFormValues = z.infer<typeof formSchema>;
@@ -56,6 +56,7 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
   const form = useForm<AddEventFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      isPredefinedVenue: false,
       date: undefined,
       startTime: '20:00', // Default to 8:00 PM
       endTime: '02:00',   // Default to 2:00 AM (Next Day)
@@ -357,7 +358,15 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
             <FormItem>
                 <FormLabel>{t('editEventForm.earnings')}</FormLabel>
                 <FormControl>
-                <Input type="number" placeholder="0" {...field} />
+                <Input
+                  type="number"
+                  placeholder="0"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                />
                 </FormControl>
                 <FormMessage />
             </FormItem>
@@ -372,7 +381,15 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.advanceNIO')}</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -385,7 +402,15 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.advanceUSD')}</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -401,7 +426,15 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.consumptionsNIO')}</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -414,7 +447,15 @@ export function AddEventForm({ onSuccess }: AddEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.consumptionsUSD')}</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
+                    <Input
+                      type="number"
+                      placeholder="0"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>

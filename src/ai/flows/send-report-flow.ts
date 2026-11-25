@@ -1,4 +1,5 @@
 import { Event } from "@/types";
+import { authFetch } from "@/lib/auth";
 
 export interface SendReportInput {
   email: string;
@@ -9,7 +10,7 @@ export interface SendReportInput {
 }
 
 export async function sendReport(input: SendReportInput): Promise<void> {
-  const response = await fetch('/api/send-report', {
+  const response = await authFetch('/api/send-report', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

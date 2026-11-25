@@ -11,13 +11,21 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { VenueList } from '@/components/settings/venue-list';
-import { LogOut, Trash2, Download, Mail, Save, Loader2, Database, Cloud, FileSpreadsheet, RefreshCw, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { LogOut, Trash2, Download, Save, Loader2, Database, Cloud, FileSpreadsheet, RefreshCw, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useSettingsStore } from '@/hooks/use-settings-store';
+import { useAuthStore } from '@/hooks/use-auth-store';
 import { useToast } from '@/hooks/use-toast';
 import type { Settings } from '@/types';
 import { useTranslation } from '@/hooks/use-translation';
-import { sendReport } from '@/ai/flows/send-report-flow';
-import { initAuth, googleSignIn, getAccessToken, logout, clearGoogleToken, getStoredGoogleUser, type StoredGoogleUser } from '@/lib/auth';
+import { initAuth, googleSignIn, getAccessToken, clearGoogleToken, getStoredGoogleUser, authFetch, type StoredGoogleUser } from '@/lib/auth';
 import type { User } from 'firebase/auth';
 import { createSpreadsheet, syncDataToSheet, fetchDataFromSheet } from '@/lib/sheets';
 import { useEvents } from '@/hooks/use-events-store';
@@ -25,8 +33,8 @@ import { useVenues } from '@/hooks/use-venues-store';
 
 export default function SettingsPage() {
   const { settings, setSettings } = useSettingsStore();
+  const { user: authUser, logout: appLogout } = useAuthStore();
   const [localSettings, setLocalSettings] = useState<Settings>(settings);
-  const [isSendingTest, setIsSendingTest] = useState(false);
   const { toast } = useToast();
   const { t } = useTranslation();
 
@@ -36,6 +44,8 @@ export default function SettingsPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 
   const { events } = useEvents();
   const { venues } = useVenues();
@@ -68,11 +78,11 @@ export default function SettingsPage() {
         setUser(result.user);
         setNeedsAuth(false);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Login failed:', err);
       toast({
-        title: 'Login failed',
-        description: 'Failed to authenticate with Google',
+        title: localSettings.language === 'es' ? 'Error de inicio de sesión' : 'Login failed',
+        description: err?.message || (localSettings.language === 'es' ? 'No se pudo autenticar con Google' : 'Failed to authenticate with Google'),
         variant: 'destructive',
       });
     } finally {
@@ -82,17 +92,14 @@ export default function SettingsPage() {
 
   const handleDisconnectGoogle = () => {
     clearGoogleToken();
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem('google_user_profile');
-    }
     setUser(null);
     setToken(null);
     setNeedsAuth(true);
     toast({
       title: localSettings.language === 'es' ? 'Sesión de Google Desvinculada' : 'Google Session Disconnected',
       description: localSettings.language === 'es'
-        ? 'Se ha desvinculado la sesión de Google. Tus datos locales se mantienen intactos.'
-        : 'Google session has been disconnected. Your local data remains intact.'
+        ? 'Se ha desvinculado la sesión de Google. Tus datos en la app se mantienen intactos.'
+        : 'Google session has been disconnected. Your app data remains intact.'
     });
   };
 
@@ -130,10 +137,10 @@ export default function SettingsPage() {
 
     setIsBackingUp(true);
     try {
-      const res = await fetch('/api/backup/drive', {
+      const res = await authFetch('/api/backup/drive', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${activeToken}`
+          'X-Google-Access-Token': activeToken
         }
       });
       if (res.ok) {
@@ -284,7 +291,7 @@ export default function SettingsPage() {
         throw new Error('No data found or failed to fetch');
       }
 
-      const response = await fetch('/api/import', {
+      const response = await authFetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -299,13 +306,11 @@ export default function SettingsPage() {
       if (response.ok) {
         toast({
           title: isEs ? 'Restauración Exitosa' : 'Restore Successful',
-          description: isEs 
-            ? `Se han recuperado ${data.events.length} eventos y ${data.venues.length} locales desde Google Sheets.` 
+          description: isEs
+            ? `Se han recuperado ${data.events.length} eventos y ${data.venues.length} locales desde Google Sheets.`
             : `Successfully restored ${data.events.length} events and ${data.venues.length} venues from Google Sheets.`,
         });
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        window.dispatchEvent(new Event('dj_data_refresh'));
       } else {
         throw new Error('Failed to overwrite local database');
       }
@@ -384,37 +389,39 @@ export default function SettingsPage() {
     });
   };
 
-  const handleSendTestEmail = async () => {
-    if (!localSettings.reportEmail) {
-        toast({
-            title: t('sendReportDialog.toast.error.title'),
-            description: t('settings.toast.reportEmail.required'),
-            variant: 'destructive',
-        });
-        return;
-    }
-    setIsSendingTest(true);
+  const handleDeleteAccount = async () => {
+    const isEs = localSettings.language === 'es';
+    setIsDeletingAccount(true);
     try {
-      await sendReport({
-        email: localSettings.reportEmail,
-        report: {
-          title: 'Test Report from DJ Ledger',
-          events: [],
-        },
+      const res = await authFetch('/api/auth/account', {
+        method: 'DELETE',
       });
+      if (!res.ok) {
+        throw new Error('Failed to delete account');
+      }
+      if (authUser?.uid) {
+        localStorage.removeItem(`dj_settings_${authUser.uid}`);
+      }
+      localStorage.removeItem('dj_settings');
       toast({
-        title: t('sendReportDialog.toast.success.title'),
-        description: t('sendReportDialog.toast.success.description', { email: localSettings.reportEmail }),
+        title: isEs ? 'Cuenta eliminada' : 'Account deleted',
+        description: isEs
+          ? 'Tus datos fueron eliminados permanentemente del servidor.'
+          : 'Your data has been permanently removed from the server.',
       });
-    } catch (error) {
-      console.error('Failed to send test report:', error);
+      setShowDeleteDialog(false);
+      await appLogout();
+    } catch (err) {
+      console.error('Delete account failed:', err);
       toast({
-        title: t('sendReportDialog.toast.error.title'),
-        description: t('sendReportDialog.toast.error.description'),
+        title: isEs ? 'Error al eliminar' : 'Delete failed',
+        description: isEs
+          ? 'No se pudieron eliminar tus datos. Intenta nuevamente.'
+          : 'Could not delete your data. Please try again.',
         variant: 'destructive',
       });
     } finally {
-      setIsSendingTest(false);
+      setIsDeletingAccount(false);
     }
   };
 
@@ -602,7 +609,9 @@ export default function SettingsPage() {
                 <div className="space-y-1">
                   <Label>Google Drive Backup</Label>
                   <p className="text-sm text-muted-foreground">
-                    Save your SQLite database to your Google Drive.
+                    {localSettings.language === 'es'
+                      ? 'Guarda una copia privada de tus eventos, locales y ajustes en Google Drive.'
+                      : 'Save a private backup of your events, venues, and settings to Google Drive.'}
                   </p>
                 </div>
                 <div className="flex items-center space-x-2">
@@ -628,11 +637,11 @@ export default function SettingsPage() {
                   </p>
                 </div>
                 <div className="flex items-center space-x-2">
-                    <Button variant="outline" onClick={() => logout()}>
+                    <Button variant="outline" onClick={() => appLogout()}>
                         <LogOut className="mr-2" />
                         {t('settings.export.session.logout')}
                     </Button>
-                    <Button variant="destructive">
+                    <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
                         <Trash2 className="mr-2" />
                         {t('settings.export.session.delete')}
                     </Button>
@@ -870,6 +879,31 @@ export default function SettingsPage() {
           </Card>
         </div>
       </div>
+
+      {/* Modal de Confirmación para Eliminar Cuenta y Datos */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {localSettings.language === 'es' ? '¿Eliminar cuenta y datos?' : 'Delete account and data?'}
+            </DialogTitle>
+            <DialogDescription>
+              {localSettings.language === 'es'
+                ? 'Esta acción eliminará permanentemente tu perfil, tus eventos y tus locales almacenados en DJ Ledger. Tus hojas de Google Sheets en tu Drive no se borrarán.'
+                : 'This action will permanently remove your profile, events, and venues stored in DJ Ledger. Your Google Sheets in Google Drive will not be deleted.'}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={isDeletingAccount}>
+              {localSettings.language === 'es' ? 'Cancelar' : 'Cancel'}
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAccount} disabled={isDeletingAccount}>
+              {isDeletingAccount ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+              {localSettings.language === 'es' ? 'Eliminar permanentemente' : 'Delete permanently'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

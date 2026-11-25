@@ -614,7 +614,7 @@ export async function fetchDataFromSheet(
   }
 }
 
-// Helper to save user profile and security credentials to the user's Google Sheet
+// Helper to save user profile metadata to the user's Google Sheet
 export async function saveUserProfileToSheet(
   accessToken: string,
   spreadsheetId: string,
@@ -623,7 +623,7 @@ export async function saveUserProfileToSheet(
     email: string;
     displayName: string;
     stageName: string;
-    pinHash?: string;
+    hasPin?: boolean;
     createdAt?: string;
   }
 ): Promise<void> {
@@ -635,7 +635,7 @@ export async function saveUserProfileToSheet(
       ['DISPLAY_NAME', profile.displayName || '', new Date().toISOString()],
       ['ACCOUNT_EMAIL', profile.email || '', new Date().toISOString()],
       ['ACCOUNT_UID', profile.uid || '', new Date().toISOString()],
-      ['SECURITY_PIN_HASH', profile.pinHash || '', new Date().toISOString()],
+      ['PIN_STATUS', profile.hasPin ? 'CONFIGURED' : 'ACTIVE', new Date().toISOString()],
       ['REGISTERED_AT', profile.createdAt || new Date().toISOString(), new Date().toISOString()],
       ['APP_NAME', 'DJ Ledger Pro', new Date().toISOString()]
     ];

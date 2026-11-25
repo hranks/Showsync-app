@@ -1,22 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { Venue } from '@/types';
-import { getAccessToken, logout, clearGoogleToken } from '@/lib/auth';
+import { getAccessToken, clearGoogleToken, authFetch } from '@/lib/auth';
 import { syncDataToSheet } from '@/lib/sheets';
 import { useToast } from '@/hooks/use-toast';
-import { useTranslation } from '@/hooks/use-translation';
 import { useSettingsStore } from '@/hooks/use-settings-store';
+import { useAuthStore } from '@/hooks/use-auth-store';
 
 export function useVenues() {
   const [venues, setVenues] = useState<Venue[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
   const { toast } = useToast();
-  const { t } = useTranslation();
   const { settings } = useSettingsStore();
+  const { isAuthenticated, user } = useAuthStore();
 
   const triggerSync = useCallback(async (updatedVenues: Venue[]) => {
     const token = await getAccessToken();
     if (!token) {
-      console.log('Google Auth token not active; venues safely saved in local database.');
       return;
     }
     try {
@@ -24,7 +23,7 @@ export function useVenues() {
       let syncedToDrive = false;
 
       if (settings.sheetsSyncEnabled && settings.spreadsheetId) {
-        const eventsRes = await fetch('/api/events');
+        const eventsRes = await authFetch('/api/events');
         if (eventsRes.ok) {
           const eventsData = await eventsRes.json();
           const events = eventsData.map((e: any) => {
@@ -36,7 +35,7 @@ export function useVenues() {
                 const y = parseInt(parts[0], 10);
                 const m = parseInt(parts[1], 10);
                 const d = parseInt(parts[2], 10);
-                parsedDate = new Date(y, m - 1, d);
+                parsedDate = new Date(y, m - 1, d, 12, 0, 0);
               } else {
                 parsedDate = new Date(e.date);
               }
@@ -49,27 +48,26 @@ export function useVenues() {
             };
           });
           await syncDataToSheet(token, settings.spreadsheetId, events, updatedVenues);
-          console.log('Background sync to Google Sheets completed successfully.');
           syncedToSheets = true;
         }
       }
 
-      // Automatically backup to Google Drive as well
-      const driveRes = await fetch('/api/backup/drive', {
+      const driveRes = await authFetch('/api/backup/drive', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${token}`
+          'X-Google-Access-Token': token
         }
       });
       if (driveRes.ok) {
-        console.log('Background backup to Google Drive completed successfully.');
         syncedToDrive = true;
       }
 
       if (syncedToSheets || syncedToDrive) {
         toast({
           title: settings.language === 'es' ? 'Sincronización Exitosa' : 'Sync Successful',
-          description: settings.language === 'es' ? 'Los datos se han sincronizado y respaldado automáticamente.' : 'Data has been synced and backed up automatically.',
+          description: settings.language === 'es'
+            ? 'Los datos se han sincronizado y respaldado automáticamente.'
+            : 'Data has been synced and backed up automatically.',
         });
       }
     } catch (err) {
@@ -83,30 +81,41 @@ export function useVenues() {
         variant: 'destructive',
       });
     }
-  }, [settings, toast]);
+  }, [settings.sheetsSyncEnabled, settings.spreadsheetId, settings.language, toast]);
 
   const fetchVenues = useCallback(async () => {
+    if (!isAuthenticated || !user?.uid) {
+      setVenues([]);
+      setIsInitialized(true);
+      return;
+    }
+
     try {
-      const res = await fetch('/api/venues');
+      const res = await authFetch('/api/venues');
       if (res.ok) {
         const data = await res.json();
         setVenues(data.sort((a: any, b: any) => a.name.localeCompare(b.name)));
       }
     } catch (error) {
-      console.error("Error fetching venues:", error);
+      console.error('Error fetching venues:', error);
     } finally {
       setIsInitialized(true);
     }
-  }, []);
+  }, [isAuthenticated, user?.uid]);
 
   useEffect(() => {
     fetchVenues();
+    const handleRefresh = () => {
+      fetchVenues();
+    };
+    window.addEventListener('dj_data_refresh', handleRefresh);
+    return () => window.removeEventListener('dj_data_refresh', handleRefresh);
   }, [fetchVenues]);
 
   const addVenue = useCallback(async (venue: Omit<Venue, 'id'>) => {
     const newVenue = { ...venue, id: crypto.randomUUID() };
     try {
-      const res = await fetch('/api/venues', {
+      const res = await authFetch('/api/venues', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newVenue)
@@ -117,30 +126,32 @@ export function useVenues() {
         triggerSync(newVenuesList);
       }
     } catch (error) {
-      console.error("Error adding venue:", error);
+      console.error('Error adding venue:', error);
     }
   }, [venues, triggerSync]);
 
   const updateVenue = useCallback(async (updatedVenue: Venue) => {
     try {
-      const res = await fetch('/api/venues', {
+      const res = await authFetch('/api/venues', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updatedVenue)
       });
       if (res.ok) {
-        const newVenuesList = venues.map(v => v.id === updatedVenue.id ? updatedVenue : v).sort((a, b) => a.name.localeCompare(b.name));
+        const newVenuesList = venues
+          .map(v => (v.id === updatedVenue.id ? updatedVenue : v))
+          .sort((a, b) => a.name.localeCompare(b.name));
         setVenues(newVenuesList);
         triggerSync(newVenuesList);
       }
     } catch (error) {
-      console.error("Error updating venue:", error);
+      console.error('Error updating venue:', error);
     }
   }, [venues, triggerSync]);
 
   const deleteVenue = useCallback(async (venueId: string) => {
     try {
-      const res = await fetch(`/api/venues?id=${venueId}`, {
+      const res = await authFetch(`/api/venues?id=${encodeURIComponent(venueId)}`, {
         method: 'DELETE',
       });
       if (res.ok) {
@@ -149,7 +160,7 @@ export function useVenues() {
         triggerSync(newVenuesList);
       }
     } catch (error) {
-      console.error("Error deleting venue:", error);
+      console.error('Error deleting venue:', error);
     }
   }, [venues, triggerSync]);
 

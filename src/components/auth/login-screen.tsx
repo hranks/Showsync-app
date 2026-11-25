@@ -49,14 +49,6 @@ export function LoginScreen() {
 
   const { toast } = useToast();
 
-  // Cryptographic SHA-256 for PIN
-  const hashSha256 = async (message: string): Promise<string> => {
-    const msgBuffer = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
   /**
    * FLIGHT 1: INICIAR SESIÓN CON GOOGLE ACCOUNT
    */
@@ -65,22 +57,20 @@ export function LoginScreen() {
     setIsProcessing(true);
 
     try {
-      // 1. Google OAuth 2.0 PKCE Flow
       const googleAuth = await googleSignIn();
-      if (!googleAuth || !googleAuth.user) {
+      if (!googleAuth || !googleAuth.user || !googleAuth.idToken) {
         throw new Error('No se pudo completar la autenticación con Google.');
       }
 
-      const { user, accessToken } = googleAuth;
+      const { user, accessToken, idToken } = googleAuth;
 
-      // 2. Comprobar si el usuario está registrado en el sistema
-      const verifyRes = await fetch(`/api/auth/login`, {
+      const verifyRes = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          uid: user.uid,
-          email: user.email
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({})
       });
 
       const verifyData = await verifyRes.json();
@@ -99,15 +89,20 @@ export function LoginScreen() {
         throw new Error(verifyData.message || 'Error en el inicio de sesión.');
       }
 
-      // 3. Login Exitoso
       const djUser: DJUser = verifyData.user;
-      
-      // Sincronizar / respaldar si tiene spreadsheet
+
       if (djUser.spreadsheetId && accessToken) {
-        saveUserProfileToSheet(accessToken, djUser.spreadsheetId, djUser).catch(() => {});
+        saveUserProfileToSheet(accessToken, djUser.spreadsheetId, {
+          uid: djUser.uid,
+          email: djUser.email,
+          displayName: djUser.displayName,
+          stageName: djUser.stageName,
+          hasPin: true,
+          createdAt: djUser.createdAt
+        }).catch(() => {});
       }
 
-      loginUser(djUser);
+      loginUser(djUser, verifyData.sessionToken);
 
       toast({
         title: '¡Bienvenido de vuelta!',
@@ -128,13 +123,12 @@ export function LoginScreen() {
 
   /**
    * FLIGHT 2: REGISTRO OBLIGATORIO CON GOOGLE ACCOUNT + NOMBRE DJ + PIN DE ACCESO
-   * Guarda los datos en el Google Account (Google Drive / Sheets) y en el sistema.
+   * El servidor verifica el token de Google y cifra el PIN con scrypt + salt aleatorio.
    */
   const handleGoogleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
-    // Validaciones
     if (!stageName.trim()) {
       setErrorMessage('Por favor, ingresa tu Nombre Artístico o de DJ.');
       return;
@@ -158,37 +152,50 @@ export function LoginScreen() {
     setIsProcessing(true);
 
     try {
-      // 1. Google OAuth 2.0 Obligatorio
       toast({
         title: 'Conectando con Google...',
         description: 'Autentica con tu cuenta de Google para vincular tu identidad y Drive.',
       });
 
       const googleAuth = await googleSignIn();
-      if (!googleAuth || !googleAuth.user) {
+      if (!googleAuth || !googleAuth.user || !googleAuth.idToken) {
         throw new Error('Es obligatorio autenticarse con tu cuenta de Google para registrarse.');
       }
 
-      const { user, accessToken } = googleAuth;
+      const { user, accessToken, idToken } = googleAuth;
 
-      // 2. Verificar que no esté ya registrado
-      const checkRes = await fetch(`/api/auth/verify?email=${encodeURIComponent(user.email || '')}&uid=${encodeURIComponent(user.uid)}`);
+      // Verificar si la cuenta ya está registrada usando el token verificado de Google
+      const checkRes = await fetch('/api/auth/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
       const checkData = await checkRes.json();
 
-      if (checkData.exists) {
-        setErrorMessage(`La cuenta (${user.email}) ya está registrada. Iniciando tu sesión...`);
-        toast({
-          title: 'Cuenta ya existente',
-          description: 'Esta cuenta ya está registrada. Redirigiendo...',
+      if (checkRes.ok && checkData.exists) {
+        const loginRes = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({})
         });
-        loginUser(checkData.user);
-        return;
+        const loginData = await loginRes.json();
+        if (loginRes.ok && loginData.user) {
+          setErrorMessage(`La cuenta (${user.email}) ya está registrada. Iniciando tu sesión...`);
+          toast({
+            title: 'Cuenta ya existente',
+            description: 'Esta cuenta ya está registrada. Redirigiendo...',
+          });
+          loginUser(loginData.user, loginData.sessionToken);
+          return;
+        }
       }
 
-      // 3. Generar hash criptográfico del PIN de acceso
-      const pinHash = await hashSha256(regPin);
-
-      // 4. Aprovisionamiento automático en su Google Account (Google Drive / Google Sheets)
+      // Aprovisionamiento automático en su Google Account (Google Drive / Google Sheets)
       toast({
         title: 'Creando tu espacio en Google Drive...',
         description: 'Generando tu base de datos privada en tu cuenta de Google.',
@@ -196,27 +203,25 @@ export function LoginScreen() {
 
       const { spreadsheetId } = await findOrCreateUserSpreadsheet(accessToken, stageName.trim());
 
-      // 5. Guardar perfil y credenciales directamente en su Google Account / Sheet
       await saveUserProfileToSheet(accessToken, spreadsheetId, {
         uid: user.uid,
         email: user.email || '',
         displayName: user.displayName || stageName.trim(),
         stageName: stageName.trim(),
-        pinHash,
+        hasPin: true,
         createdAt: new Date().toISOString()
       });
 
-      // 6. Registrar en el backend
+      // Registrar en el backend (envía PIN por TLS para hash scrypt en servidor)
       const regRes = await fetch('/api/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
         body: JSON.stringify({
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || stageName.trim(),
           stageName: stageName.trim(),
-          pinHash,
-          photoURL: user.photoURL || '',
+          pin: regPin,
           spreadsheetId
         })
       });
@@ -227,12 +232,11 @@ export function LoginScreen() {
         throw new Error(regData.message || 'Error al completar el registro.');
       }
 
-      // 7. Inicio de sesión exitoso
       const newDJUser: DJUser = regData.user;
-      loginUser(newDJUser);
+      loginUser(newDJUser, regData.sessionToken);
 
       toast({
-        title: '🎉 ¡Registro Completado con Éxito!',
+        title: '¡Registro Completado con Éxito!',
         description: `Tu perfil de ${newDJUser.stageName}, tu PIN de seguridad y tu base de datos en Google Sheets han sido creados.`,
       });
     } catch (err: any) {
@@ -249,16 +253,17 @@ export function LoginScreen() {
   };
 
   /**
-   * FLIGHT 3: ACCESO RÁPIDO CON PIN
+   * FLIGHT 3: ACCESO RÁPIDO CON PIN (IDENTIFICADOR OBLIGATORIO)
    */
   const handlePinDigitChange = (index: number, val: string) => {
     if (val.length > 1) val = val.slice(-1);
+    const cleaned = val.replace(/\D/g, '');
     const newPin = [...loginPin];
-    newPin[index] = val;
+    newPin[index] = cleaned;
     setLoginPin(newPin);
     setPinError(false);
 
-    if (val && index < 5) {
+    if (cleaned && index < 5) {
       pinInputRefs.current[index + 1]?.focus();
     }
   };
@@ -272,6 +277,13 @@ export function LoginScreen() {
   const handlePinLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+
+    const identifier = pinIdentifier.trim();
+    if (!identifier) {
+      setErrorMessage('Ingresa tu correo electrónico o nombre de DJ para validar tu PIN.');
+      return;
+    }
+
     const pinStr = loginPin.join('');
     if (pinStr.length < 4) {
       setErrorMessage('Ingresa al menos 4 dígitos de tu PIN.');
@@ -281,15 +293,12 @@ export function LoginScreen() {
     setIsProcessing(true);
 
     try {
-      const pinHash = await hashSha256(pinStr);
-
       const res = await fetch('/api/auth/pin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pin: pinStr,
-          pinHash,
-          emailOrStageName: pinIdentifier.trim() || undefined
+          identifier,
+          pin: pinStr
         })
       });
 
@@ -300,7 +309,7 @@ export function LoginScreen() {
         throw new Error(data.message || 'PIN de acceso incorrecto.');
       }
 
-      loginUser(data.user);
+      loginUser(data.user, data.sessionToken);
       toast({
         title: 'Acceso Autorizado',
         description: `Bienvenido de nuevo, ${data.user.stageName || data.user.displayName}.`,
@@ -482,10 +491,11 @@ export function LoginScreen() {
                 <div className="space-y-3">
                   <div className="space-y-1">
                     <Label htmlFor="pinIdentifier" className="text-xs font-semibold">
-                      Nombre de DJ o Correo (Opcional)
+                      Nombre de DJ o Correo <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       id="pinIdentifier"
+                      required
                       placeholder="Ej. DJ Ranks o tu correo"
                       value={pinIdentifier}
                       onChange={(e) => setPinIdentifier(e.target.value)}
@@ -520,7 +530,7 @@ export function LoginScreen() {
 
                 <Button
                   type="submit"
-                  disabled={isProcessing || loginPin.join('').length < 4}
+                  disabled={isProcessing || !pinIdentifier.trim() || loginPin.join('').length < 4}
                   className="w-full py-5 font-bold"
                 >
                   {isProcessing ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <KeyRound className="w-4 h-4 mr-2" />}

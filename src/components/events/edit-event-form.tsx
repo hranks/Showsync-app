@@ -29,15 +29,15 @@ import { useTranslation } from '@/hooks/use-translation';
 const formSchema = z.object({
   venueName: z.string().min(1, 'Venue name is required.'),
   eventType: z.enum(['Club', 'Corporate']),
-  date: z.date({ required_error: 'Date is required.' }),
+  date: z.date({ error: 'Date is required.' }),
   startTime: z.string().optional(),
   endTime: z.string().optional(),
-  totalEarnings: z.coerce.number().min(0, "Earnings must be a positive number."),
+  totalEarnings: z.number().min(0, "Earnings must be a positive number."),
   notes: z.string().optional(),
-  paymentAdvanceNIO: z.coerce.number().optional(),
-  paymentAdvanceUSD: z.coerce.number().optional(),
-  consumptionsNIO: z.coerce.number().optional(),
-  consumptionsUSD: z.coerce.number().optional(),
+  paymentAdvanceNIO: z.number().optional(),
+  paymentAdvanceUSD: z.number().optional(),
+  consumptionsNIO: z.number().optional(),
+  consumptionsUSD: z.number().optional(),
 });
 
 type EditEventFormValues = z.infer<typeof formSchema>;
@@ -316,7 +316,14 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
             <FormItem>
                 <FormLabel>{t('editEventForm.earnings')}</FormLabel>
                 <FormControl>
-                <Input type="number" {...field} />
+                <Input
+                  type="number"
+                  name={field.name}
+                  ref={field.ref}
+                  onBlur={field.onBlur}
+                  value={field.value ?? ''}
+                  onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                />
                 </FormControl>
                 <FormMessage />
             </FormItem>
@@ -331,7 +338,14 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.advanceNIO')}</FormLabel>
                     <FormControl>
-                    <Input type="number" {...field} value={field.value || ''} />
+                    <Input
+                      type="number"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -344,7 +358,14 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.advanceUSD')}</FormLabel>
                     <FormControl>
-                    <Input type="number" {...field} value={field.value || ''} />
+                    <Input
+                      type="number"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -360,7 +381,14 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.consumptionsNIO')}</FormLabel>
                     <FormControl>
-                    <Input type="number" {...field} value={field.value || ''} />
+                    <Input
+                      type="number"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -373,7 +401,14 @@ export function EditEventForm({ event, onSuccess }: EditEventFormProps) {
                 <FormItem>
                     <FormLabel>{t('addEventForm.consumptionsUSD')}</FormLabel>
                     <FormControl>
-                    <Input type="number" {...field} value={field.value || ''} />
+                    <Input
+                      type="number"
+                      name={field.name}
+                      ref={field.ref}
+                      onBlur={field.onBlur}
+                      value={field.value || ''}
+                      onChange={(e) => field.onChange(e.target.value === '' ? 0 : Number(e.target.value))}
+                    />
                     </FormControl>
                     <FormMessage />
                 </FormItem>

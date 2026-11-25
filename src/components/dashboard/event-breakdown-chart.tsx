@@ -70,7 +70,7 @@ export function EventBreakdownChart({ events }: EventBreakdownChartProps) {
               innerRadius={80}
               fill="#8884d8"
               dataKey="value"
-              label={({ name, percent }) => `${t(`eventTypes.${name.toLowerCase()}`)} ${(percent * 100).toFixed(0)}%`}
+              label={({ name = '', percent = 0 }) => `${t(`eventTypes.${String(name).toLowerCase()}`)} ${(percent * 100).toFixed(0)}%`}
             >
               {data.map((entry) => (
                 <Cell key={`cell-${entry.name}`} fill={COLORS[entry.name as keyof typeof COLORS]} />
